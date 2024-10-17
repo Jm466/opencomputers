@@ -1,1 +1,1 @@
-../ventanos/init.lua
+require("ventanos_data")()

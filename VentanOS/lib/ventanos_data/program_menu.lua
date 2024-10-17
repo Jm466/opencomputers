@@ -1,5 +1,4 @@
 local fs = require("filesystem")
-local ventanos_api = require("ventanos")
 
 local PATH = {
 	"/home",
@@ -51,15 +50,21 @@ local function get_programs()
 	return programs
 end
 
-local function renderer()
-	local programs = get_programs()
+---
+---@param handler WindowHandler
+local function renderer(handler)
+	handler:fill(1, 1, 1000, 1000, " ")
+	handler:set(1, 1, "Test")
 end
 
 local selected_last_touch
 local function touch_handler() end
 
-local function main()
-	ventanos_api.new("Menú de programas", renderer, touch_handler, touch_handler)
-end
+return function()
+	local ventanos_api = require("ventanos")
 
-return main
+	---@type WindowHandler
+	local w = ventanos_api.new("Menú de programas", renderer, touch_handler, touch_handler)
+
+	w:setTitle("Test")
+end
