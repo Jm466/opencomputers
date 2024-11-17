@@ -8,6 +8,8 @@ local util = require("ventanos_data/util")
 ---@field package n_threads integer
 ---@field release function
 ---@field acquire function
+---@field try_acquire function
+---@field is_locked function
 
 ---@class RegionMutex
 ---@field package locked_by {thread: thread, x: integer, y: integer, width: integer, height: integer}[]
@@ -55,6 +57,34 @@ local function acquire(lock)
 	lock.occupied = false
 end
 
+--- Try to lock a mutex
+---@param lock Mutex
+---@return boolean Locked Whether the lock could be acquired
+local function try_acquire(lock)
+	local return_value
+	while lock.occupied do
+	end
+
+	lock.occupied = true
+
+	if lock.locked_by then
+		return_value = false
+	else
+		return_value = true
+		lock.locked_by = thread.current()
+	end
+
+	lock.occupied = false
+	return return_value
+end
+
+---
+---@param lock Mutex
+---@return boolean
+local function is_locked(lock)
+	return lock.locked_by and true
+end
+
 --- Unlocks a mutex
 ---@param lock Mutex
 local function release(lock)
@@ -90,6 +120,8 @@ local function new_mutex()
 		__index = {
 			acquire = acquire,
 			release = release,
+			try_acquire = try_acquire,
+			is_locked = is_locked,
 		},
 	})
 end

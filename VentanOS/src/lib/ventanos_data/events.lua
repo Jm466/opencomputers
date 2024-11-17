@@ -41,6 +41,7 @@ local function start()
 		wrap(wm.mouse_handler, _event, x, y, button)
 	end)
 	event.listen("drop", function(_event, _, x, y, button)
+		last_drag = 0
 		wrap(wm.mouse_handler, _event, x, y, button)
 	end)
 	event.listen("scroll", function(_event, _, x, y, direction)

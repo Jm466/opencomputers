@@ -1,7 +1,6 @@
 local fs = require("filesystem")
 local gpu = require("component").gpu
 local imager = require("imager")
-local thread = require("thread")
 
 local config = {
 	logo_width = 14,
@@ -61,7 +60,7 @@ local function seek_programs()
 						programs[#programs + 1] = {
 							name = name,
 							logo_path = fs.concat(cannonical_file, "logo.ppm"),
-							init_path = fs.concat("ventanos_apps", file),
+							init_path = fs.concat(cannonical_file, "init.lua"),
 						}
 						break
 					end
@@ -82,28 +81,27 @@ local function seek_programs()
 end
 
 local left, top = 0, 0
----@param handler WindowHandler
-local function renderer(handler)
-	handler:setBackground(config.background)
-	handler:setForeground(config.foreground)
-	handler:fill(1, 1)
+local function renderer(handle)
+	handle:setBackground(config.background)
+	handle:setForeground(config.foreground)
+	handle:fill(1, 1)
 
-	local width, height = handler:getViewport()
+	local width, height = handle:getViewport()
 	local end_x = math.floor((width - 1) / (config.logo_width + 1)) * (config.logo_width + 1)
 	local end_y = math.floor((height - 1) / (config.logo_height + 2)) * (config.logo_height + 1)
-	local offset_x = handler.window.x + left - 1
-	local offset_y = handler.window.y + top - 1
+	local offset_x = handle.window.x + left - 1
+	local offset_y = handle.window.y + top - 1
 
 	local app = 1
-	for x = 2, end_x, config.logo_width + 1 do
-		for y = 1, end_y, config.logo_height + 1 do
+	for y = 1, end_y, config.logo_height + 1 do
+		for x = 2, end_x, config.logo_width + 1 do
 			if app > #programs then
 				goto end_render
 			end
 			local name = programs[app].name:len() > config.logo_width
 					and programs[app].name:sub(1, config.logo_width - 3) .. "..."
 				or programs[app].name
-			handler:set(7 - name:len() / 2 + 1, y, name)
+			handle:set(7 - name:len() / 2 + x, y, name)
 			app = app + 1
 		end
 	end
@@ -111,8 +109,8 @@ local function renderer(handler)
 	::end_render::
 
 	app = 1
-	for x = 2 + offset_x, end_x + offset_x, config.logo_width + 1 do
-		for y = 2 + offset_y, end_y + offset_y, config.logo_height + 2 do
+	for y = 2 + offset_y, end_y + offset_y, config.logo_height + 1 do
+		for x = 2 + offset_x, end_x + offset_x, config.logo_width + 1 do
 			if app > #programs then
 				return
 			end
@@ -122,16 +120,16 @@ local function renderer(handler)
 	end
 end
 
-local function get_app_selected(handler, x, y)
-	local width, height = handler:getViewport()
+local function get_app_selected(handle, x, y)
+	local width, height = handle:getViewport()
 	local app_width = config.logo_width + 1
 	local app_height = config.logo_height + 1
 	local n_wide = math.floor((width - 1) / app_width)
 	local n_tall = math.floor((height - 1) / app_height)
 
 	local col = nil
-	for i = 1, n_wide * app_width, app_width do
-		if x >= (i - 1) * app_width + 2 and x < i * app_width + 2 then
+	for i = 1, n_wide do
+		if x >= (i - 1) * app_width + 2 and x < i * app_width + 1 then
 			col = i
 			break
 		end
@@ -141,65 +139,60 @@ local function get_app_selected(handler, x, y)
 		return
 	end
 
-	for i = 1, n_tall * app_height, app_height do
-		if y >= (i - 1) * app_height + 2 and y < i * app_height + 2 then
-			return programs[(col - 1) * n_wide + i]
+	for row = 1, n_tall do
+		if y >= (row - 1) * app_height + 2 and y < row * app_height + 1 then
+			return programs[(row - 1) * n_wide + col]
 		end
 	end
 end
 
 local selected_last_touch = nil
-local function touch_handler(handler, x, y)
-	selected_last_touch = get_app_selected(handler, x, y)
+local function touch_handler(handle, x, y)
+	selected_last_touch = get_app_selected(handle, x, y)
 end
 
-local function drop_handler(handler, x, y)
-	local app = get_app_selected(handler, x, y)
+local function drop_handler(handle, x, y)
+	local app = get_app_selected(handle, x, y)
 
 	if app == nil or app ~= selected_last_touch then
 		return
 	end
 
-	handler.window.touch_handler = nil
-	handler.window.drop_handler = nil
+	handle.window.touch_handler = nil
+	handle.window.drop_handler = nil
 
-	handler:fill(1, 1)
+	handle:fill(1, 1)
 
 	local wm = require("ventanos_data/window_manager")
 
-	wm.call_userspace(handler.id, function()
-		handler:setTitle(app.name)
+	wm.call_userspace(handle.id, function()
+		handle:setTitle(app.name)
 
-		local main_table = require(app.init_path) -- This is where the magic happens: The entry point
+		local app_env = handle.window.environment
 
-		if main_table == nil then
-			error("When loading the application, init.lua did not return a table")
-		elseif main_table.redraw_handler == nil then
-			error("When loading the application, redraw_handler was not found in main_table")
-		end
+		loadfile(app.init_path, "t", app_env)() -- This is where the magic happens: The entry point
 
-		handler.window.redraw_handler = main_table.redraw_handler
-		if main_table.touch_handler then
-			handler.window.touch_handler = main_table.touch_handler
-		end
-		if main_table.drop_handler then
-			handler.window.drop_handler = main_table.drop_handler
-		end
-		if main_table.drag_handler then
-			handler.window.drag_handler = main_table.drag_handler
-		end
-		if main_table.scroll_handler then
-			handler.window.scroll_handler = main_table.scroll_handler
+		if app_env.flauta then
+			print("Flauta")
 		end
 
-		if main_table.main then
-			main_table.main() -- This is it, the real deal, the actual entry point, if it has one anyway
+		if app_env.Redraw == nil then
+			error("When loading the application, function redraw_handler was not found in environment")
 		end
 
-		main_table.redraw_handler(handler)
+		handle.window.redraw_handler = app_env.Redraw
+		handle.window.touch_handler = app_env.Touch
+		handle.window.drop_handler = app_env.Drop
+		handle.window.drag_handler = app_env.Drag
+		handle.window.scroll_handler = app_env.Scroll
+
+		if app_env.Main then
+			app_env.Main() -- This is it, the real deal, the actual entry point(if it has one anyway)
+		end
+
+		handle.window.redraw_handler()
 	end, "main")
 end
-
 return function()
 	local ventanos_api = require("ventanos")
 	local wm = require("ventanos_data/window_manager")
@@ -207,6 +200,15 @@ return function()
 
 	seek_programs()
 
-	local w = ventanos_api.new("Programs launcher", renderer, touch_handler, drop_handler)
+	local env = {}
+	local w = ventanos_api.new("Programs launcher", function()
+		renderer(env.handle)
+	end, function(x, y)
+		touch_handler(env.handle, x, y)
+	end, function(x, y)
+		drop_handler(env.handle, x, y)
+	end)
+	env.handle = w
+
 	wm.draw_window(w.id)
 end

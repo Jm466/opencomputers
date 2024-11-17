@@ -4,9 +4,9 @@ local thread = require("thread")
 local util = require("ventanos_data/util")
 local taskbar = require("ventanos_data/taskbar")
 local background = require("ventanos_data/background")
-require("ventanos_data/mutex")
 
 local viewport_max_x, viewport_max_y = gpu.getViewport()
+local max_memory = tostring(math.floor(gpu.totalMemory()))
 
 local toolbar_sizes = { top = 1, bottom = 0, left = 1, right = 1 }
 local skin = {
@@ -28,16 +28,18 @@ local skin = {
 	tile_menu_secondary = 5528181,
 	user_crash = 16711680,
 	user_crash_background = 16776960,
+	memory = 0xFFFFFF,
 }
 
 local options = {
 	min_window_width = 15,
 	min_window_height = 5,
+	debug = false,
 }
 
 ---@class Window
 ---@field title string
----@field window_handler WindowHandler
+---@field environment table
 ---@field redraw_handler function
 ---@field touch_handler function|nil
 ---@field drop_handler function|nil
@@ -64,10 +66,10 @@ local options = {
 ---@field pending_redraws Rectangle[]
 
 ---@type Window[]
-local windows = {}
+local windows = {} -- Unordered list that contains all the windows
 
 ---@type integer[]
-local visible = {} -- List of window id's ordered by visibility
+local visible = {} -- List of window id's ordered by visibility(the first one is on top of the rest, the second one is on top of everyone but the first and so on)
 
 local last_window_id = 1
 ---@return integer
@@ -86,8 +88,59 @@ local function id_to_visible_index(id)
 			return i
 		end
 	end
-	util.stack_trace("id_to_visible_index(): No visible window with id " .. id)
+
+	local vw_str = "["
+	for _, v in pairs(visible) do
+		vw_str = vw_str .. v .. ", "
+	end
+
+	vw_str = vw_str:sub(1, vw_str:len() - 2) .. "]"
+
+	error("id_to_visible_index(): No visible window with id " .. id .. ", visible windows: " .. vw_str)
 	return 0
+end
+
+local function id_to_window(id)
+	local w = windows[id]
+	if w ~= nil then
+		return w
+	end
+
+	local w_str = "["
+	for _, v in pairs(windows) do
+		w_str = w_str .. "{" .. v.title .. "," .. v.x .. "," .. v.y .. "}" .. ", "
+	end
+
+	w_str = w_str:sub(1, w_str:len() - 2) .. "]"
+	error("id_to_window(): No window with id " .. id .. ", windows: " .. w_str)
+end
+
+local function print_debug_info()
+	local max_x = gpu.getViewport()
+	max_x = max_x - 1
+	local start_x = max_x - 50
+	local idx = 2
+
+	gpu.fill(start_x, idx, max_x - start_x + 1, 10, " ")
+
+	gpu.set(start_x, idx, " --- Visible ---")
+
+	for i, v in pairs(visible) do
+		idx = idx + 1
+		gpu.set(start_x, idx, tostring(i) .. "º: window " .. tostring(v))
+	end
+
+	idx = idx + 1
+	gpu.set(start_x, idx, " --- Windows ---")
+
+	for i, v in pairs(windows) do
+		idx = idx + 1
+		gpu.set(
+			start_x,
+			idx,
+			"window " .. tostring(i) .. ": " .. v.title .. " at " .. tostring(v.x) .. "," .. tostring(v.y)
+		)
+	end
 end
 
 ---@return integer top
@@ -107,7 +160,7 @@ end
 local function has_windows_on_top(id, x, y, width, height)
 	local rect = { x = x, y = y, width = width, height = height }
 	for i = id_to_visible_index(id) - 1, 1, -1 do
-		local w = windows[i]
+		local w = id_to_window(i)
 		if w ~= nil then
 			if util.get_intersection(rect, { x = w.x, y = w.y, width = w.width, height = w.height }) then
 				return true
@@ -134,7 +187,7 @@ end
 ---@return boolean
 ---@return string reason
 local function window_copy(id, x, y, width, height, tx, ty)
-	local w = windows[id]
+	local w = id_to_window(id)
 	local top, _, left = get_toolbar_sizes()
 
 	if w.minimized then
@@ -195,7 +248,7 @@ end
 ---@return string reason
 local function window_fill(id, x, y, width, height, char)
 	local top, _, left = get_toolbar_sizes()
-	local w = windows[id]
+	local w = id_to_window(id)
 
 	if w.minimized then
 		return false, "minimized"
@@ -231,7 +284,7 @@ end
 ---@return boolean
 ---@return string reason
 local function window_set(id, x, y, value, vertical)
-	local w = windows[id]
+	local w = id_to_window(id)
 	local top, _, left = get_toolbar_sizes()
 
 	if w.minimized then
@@ -280,7 +333,7 @@ end
 ---@return boolean
 ---@return string reason
 local function window_print(id, ...)
-	local w = windows[id]
+	local w = id_to_window(id)
 	local top, _, left = get_toolbar_sizes()
 	local offset_x = w.x + left - 1
 	local offset_y = w.y + top - 1
@@ -294,15 +347,17 @@ local function window_print(id, ...)
 		end
 	end
 
-	local function line_feed()
-		w.cursor_x = 1
-		w.cursor_y = w.cursor_y + 1
+	local function check_scroll()
 		if w.cursor_y > w.viewport_height then
 			w.cursor_y = w.viewport_height
 			w.geometry_lock:release()
 			local status, reason = window_copy(id, 1, 2, w.viewport_width, w.viewport_height - 1, 0, -1)
 			if not status then
 				return false, reason .. "(window_copy)1"
+			end
+			status, reason = window_fill(id, 1, w.viewport_height, w.viewport_width, 1, " ")
+			if not status then
+				return false, reason .. "(window_fill)"
 			else
 				w.geometry_lock:acquire()
 			end
@@ -326,79 +381,78 @@ local function window_print(id, ...)
 
 	check_window_on_top()
 
+	check_scroll()
+
+	local beeped = false
+
 	while message:len() > 0 do
 		to_print = message:sub(1, 1)
 		message = message:sub(2)
 
 		if to_print == "\n" then
-			line_feed()
+			w.cursor_x = 1
+			w.cursor_y = w.cursor_y + 1
+			check_scroll()
 		elseif to_print == "\t" then
-			message = "    " .. message
+			w.cursor_x = ((w.cursor_x - 1) - ((w.cursor_x - 1) % 8)) + 9
+		elseif to_print == "\r" then
+			w.cursor_x = 1
+		elseif to_print == "\b" then
+			w.cursor_x = w.cursor_x - 1
+		elseif to_print == "\v" then
+			w.cursor_y = w.cursor_y + 1
+			check_scroll()
+		elseif to_print == "\a" and not beeped then
+			require("computer").beep()
+			beeped = true
 		else
 			gpu.set(w.cursor_x + offset_x, w.cursor_y + offset_y, to_print)
 		end
 		if w.cursor_x == w.viewport_width then
-			line_feed()
+			w.cursor_x = 1
+			w.cursor_y = w.cursor_y + 1
+			check_scroll()
 		else
 			w.cursor_x = w.cursor_x + 1
 		end
 	end
-	line_feed()
+	w.cursor_x = 1
+	w.cursor_y = w.cursor_y + 1
 
 	w.geometry_lock:release()
 	return true, ""
 end
 
----@param id integer
----@param user_function function
----@param type "handler"|"main"
-local function call_userspace(id, user_function, type, ...)
-	thread.create(function(...)
-		local status, error = pcall(user_function, ...)
-		if status then
-			return error
-		end
-
-		gpu.setBackground(skin.user_crash_background)
-		gpu.setForeground(skin.user_crash)
-
-		local w = windows[id]
-		local info = debug.getinfo(user_function)
-
-		w.cursor_x = 1
-		w.cursor_y = 1
-		window_fill(id, 1, 1, w.viewport_width, w.viewport_height, " ")
-		if type == "main" then
-			window_print(id, "The application just crashed!")
-		elseif type == "handler" then
-			window_print(id, "A handler of the application just crashed!")
-		end
-		window_print(id, error)
-		window_print(
-			id,
-			"The function was defined at: " .. tostring(info.short_src) .. ":" .. tostring(info.linedefined)
-		)
-		window_print(id, "Now follows all the information that could be gathered")
-		for i, v in pairs(info) do
-			window_print(id, tostring(i) .. "    " .. tostring(v))
-		end
-	end, ...)
+local function draw_memory()
+	gpu.setBackground(2316495)
+	gpu.setForeground(skin.memory)
+	local x = viewport_max_x - 15
+	gpu.fill(x, viewport_max_y, 15, 1, " ")
+	gpu.set(x, viewport_max_y, tostring(math.floor(gpu.freeMemory())) .. "/" .. max_memory .. "Bytes")
 end
 
 --- Draws the window title
 ---@param id integer
 local function draw_title(id)
-	local w = windows[id]
+	local w = id_to_window(id)
 	local _, _, left = get_toolbar_sizes()
 
 	w.geometry_lock:acquire()
 
 	gpu.setBackground(skin.title_background)
 	gpu.setForeground(skin.title)
-	if w.title:len() > w.width - left - 5 then
-		gpu.set(w.x + 1, w.y, w.title:sub(1, w.width - left - 8) .. "...")
+
+	local title = w.title
+
+	if options.debug then
+		title = "(" .. id .. ")" .. w.title
 	end
-	gpu.set(w.x + 1, w.y, w.title)
+
+	if w.title:len() > w.width - left - 5 then
+		title = w.title:sub(1, w.width - left - 8) .. "..."
+	end
+
+	gpu.set(w.x + 1, w.y, title)
 
 	w.geometry_lock:release()
 end
@@ -406,7 +460,7 @@ end
 --- Draws the frame of the window
 ---@param id integer
 local function draw_frame(id)
-	local w = windows[id]
+	local w = id_to_window(id)
 	w.geometry_lock:acquire()
 
 	gpu.setBackground(skin.window_border)
@@ -440,12 +494,13 @@ local function draw_frame(id)
 	w.geometry_lock:release()
 end
 
+local call_userspace
 --- Draws the window to the screen
 ---@param id integer
 local function draw_window(id)
 	draw_frame(id)
 	draw_title(id)
-	call_userspace(id, windows[id].redraw_handler, "handler", windows[id].window_handler)
+	call_userspace(id, id_to_window(id).redraw_handler, "handler")
 end
 
 local function draw_desktop()
@@ -461,6 +516,67 @@ local function draw_desktop()
 	end
 
 	visible = visible_cpy
+end
+---@param id integer
+---@param new_title string
+local function update_title(id, new_title)
+	id_to_window(id).title = new_title
+	draw_frame(id)
+	draw_title(id)
+end
+
+---@param id integer
+---@param user_function function
+---@param type "handler"|"main"|"internal"
+function call_userspace(id, user_function, type, ...)
+	thread.create(function(...)
+		local w = id_to_window(id)
+
+		local status, error = pcall(user_function, ...)
+
+		if status then
+			return error
+		end
+
+		gpu.setBackground(skin.user_crash_background)
+		gpu.setForeground(skin.user_crash)
+
+		local info = debug.getinfo(user_function)
+
+		if w.geometry_lock:is_locked() then
+			w.geometry_lock:release()
+		end
+
+		update_title(id, "Kaboom!")
+
+		w.touch_handler = nil
+		w.drop_handler = nil
+		w.drag_handler = nil
+		w.scroll_handler = nil
+		w.redraw_handler = function()
+			w.cursor_x = 1
+			w.cursor_y = 1
+			window_fill(id, 1, 1, w.viewport_width, w.viewport_height, " ")
+			if type == "main" then
+				window_print(id, "The application just crashed!")
+			elseif type == "handler" then
+				window_print(id, "A handler of the application just crashed!")
+			elseif type == "internal" then
+				window_print(id, "VentanOS error!")
+			end
+			window_print(id, error)
+			window_print(
+				id,
+				"The function was defined at: " .. tostring(info.short_src) .. ":" .. tostring(info.linedefined)
+			)
+			window_print(id, "Now follows all the information that could be gathered")
+			for i, v in pairs(info) do
+				window_print(id, tostring(i) .. "    " .. tostring(v))
+			end
+		end
+
+		w.redraw_handler()
+	end, ...)
 end
 
 ---@param window Window
@@ -485,7 +601,7 @@ end
 ---@param id integer
 ---@param rects Rectangle[]
 local function insert_pending_redraw(id, rects)
-	local w = windows[id]
+	local w = id_to_window(id)
 	local i = 1
 	for _, rect in pairs(rects) do
 		if w.pending_redraws[i] == nil then
@@ -499,7 +615,10 @@ end
 ---@param id integer
 ---@param regions Rectangle[]
 local function try_redraw(id, regions)
-	local w = windows[id]
+	if true then
+		return
+	end
+	local w = id_to_window(id)
 	local start_i = id_to_visible_index(id) + 1
 
 	---@param regs Rectangle[]
@@ -508,7 +627,7 @@ local function try_redraw(id, regions)
 		while i <= #regs do
 			local reg = regs[i]
 			for w_i = start_i, #visible do
-				local win = windows[w_i]
+				local win = id_to_window(w_i)
 				local inter =
 					util.get_intersection(reg, { x = win.x, y = win.y, width = win.width, height = win.height })
 				if not inter then
@@ -519,7 +638,6 @@ local function try_redraw(id, regions)
 					id,
 					win.redraw_handler,
 					"handler",
-					win.window_handler,
 					win.x + toolbar_sizes.left + inter.x - 1,
 					win.y + toolbar_sizes.top + inter.y - 1,
 					inter.width,
@@ -565,7 +683,10 @@ end
 ---@param width integer
 ---@param height integer
 local function redraw(id, x, y, width, height)
-	local w = windows[id]
+	if true then
+		return
+	end
+	local w = id_to_window(id)
 	---@type Rectangle[]
 	local regions_to_add = { { x = x, y = y, width = width, height = height } }
 	local regions_to_add_idx = 1
@@ -589,7 +710,7 @@ end
 
 ---@param id integer
 local function move_to_top(id)
-	local w = windows[id]
+	local w = id_to_window(id)
 	if w.minimized then
 		return
 	end
@@ -600,14 +721,14 @@ local function move_to_top(id)
 		return
 	end
 
-	local rect = { x = w.x, y = w.y, width = w.width, height = w.height }
+	local w_rect = { x = w.x, y = w.y, width = w.width, height = w.height }
 
 	if not w.screen_buffer then
 		for i = index - 1, 1, -1 do
-			local win = windows[visible[i]]
+			local win = id_to_window(visible[i])
 			if win ~= nil then
 				local inter =
-					util.get_intersection(rect, { x = win.x, y = win.y, width = win.width, height = win.height })
+					util.get_intersection(w_rect, { x = win.x, y = win.y, width = win.width, height = win.height })
 				if inter ~= nil then
 					redraw(id, inter.x, inter.y, inter.width, inter.height)
 				end
@@ -617,62 +738,47 @@ local function move_to_top(id)
 			visible[i] = visible[i + 1]
 		end
 		visible[1] = id
-		call_userspace(id, w.redraw_handler, "handler", w.window_handler)
+		call_userspace(id, w.redraw_handler, "handler")
 		return
 	end
 
 	w.geometry_lock:acquire()
-	local final_buffer = gpu.allocateBuffer(w.width, w.height)
-	local final_buffer_regions = {} ---@type Rectangle[]
-	local last_region ---@type integer
 
 	for i = index - 1, 1, -1 do
-		local win = windows[visible[i]]
-		if win ~= nil then
-			local inter = util.get_intersection(rect, { x = win.x, y = win.y, width = win.width, height = win.height })
+		local w_cur = id_to_window(visible[i])
+		if w_cur ~= nil then
+			local inter =
+				util.get_intersection(w_rect, { x = w_cur.x, y = w_cur.y, width = w_cur.width, height = w_cur.height })
 			if inter ~= nil then
-				win.geometry_lock:acquire()
-				if win.screen_buffer then
-					if final_buffer then
-						gpu.bitblt(
-							final_buffer,
-							inter.x - win.x + 1,
-							inter.y - win.y + 1,
-							inter.width,
-							inter.height,
-							win.screen_buffer,
-							inter.x - win.x + 1,
-							inter.y - win.y + 1
-						)
-						gpu.bitblt(
-							win.screen_buffer,
-							inter.x - win.x + 1,
-							inter.y - win.y + 1,
-							inter.width,
-							inter.height,
-							w.screen_buffer,
-							inter.x - w.x + 1,
-							inter.y - w.y + 1
-						)
-						last_region = #final_buffer_regions + 1
-						final_buffer_regions[last_region] = inter
-					else -- No tmp_buffer
-						gpu.bitblt(
-							w.screen_buffer,
-							inter.x - w.x + 1,
-							inter.y - w.y + 1,
-							inter.width,
-							inter.height,
-							win.screen_buffer,
-							inter.x - win.x + 1,
-							inter.y - win.y + 1
-						)
-						redraw(i, inter.x, inter.y, inter.width, inter.height)
-					end
-				else -- No screen_buffer for win
-					redraw(id, inter.x, inter.y, inter.width, inter.height)
+				w_cur.geometry_lock:acquire()
+
+				if w_cur.screen_buffer then
+					gpu.bitblt(
+						w_cur.screen_buffer,
+						inter.x - w_cur.x + 1,
+						inter.y - w_cur.y + 1,
+						inter.width,
+						inter.height,
+						w.screen_buffer,
+						inter.x - w.x + 1,
+						inter.y - w.y + 1
+					)
+				else
+					redraw(visible[i], inter.x, inter.y, inter.width, inter.height)
 				end
-				win.geometry_lock:release()
+
+				gpu.bitblt(
+					w.screen_buffer,
+					inter.x - w.x + 1,
+					inter.y - w.y + 1,
+					inter.width,
+					inter.height,
+					0,
+					inter.x,
+					inter.y
+				)
+
+				w_cur.geometry_lock:release()
 			end
 		end
 	end
@@ -687,7 +793,7 @@ end
 
 ---@param id integer
 local function minimize(id)
-	local w = windows[id]
+	local w = id_to_window(id)
 	if w.minimized then
 		return
 	end
@@ -708,10 +814,10 @@ end
 
 ---@param id integer
 local function unminimize(id)
-	if not windows[id].minimized then
+	if not id_to_window(id).minimized then
 		return
 	end
-	windows[id].minimized = false
+	id_to_window(id).minimized = false
 
 	for i = 1, #visible do
 		visible[i + 1] = visible[i]
@@ -721,27 +827,24 @@ end
 
 ---@param id integer
 local function remove(id)
+	local w = id_to_window(id)
 	minimize(id)
 	if last_window_id > id then
 		last_window_id = id
 	end
 
-	windows[id] = nil
-end
+	if w.screen_buffer then
+		gpu.freeBuffer(w.screen_buffer)
+	end
 
----@param id integer
----@param new_title string
-local function update_title(id, new_title)
-	windows[id]["title"] = new_title
-	draw_frame(id)
-	draw_title(id)
+	windows[id] = nil
 end
 
 ---@param t thread
 local function remove_all_of_thread(t)
 	for i = 1, #windows do
-		if windows[i] ~= nil then
-			if windows[i].thread == t then
+		if id_to_window(i) ~= nil then
+			if id_to_window(i).thread == t then
 				remove(i)
 			end
 		end
@@ -750,7 +853,7 @@ end
 
 local function remove_all()
 	for i = 1, #windows do
-		if windows[i] ~= nil then
+		if id_to_window(i) ~= nil then
 			remove(i)
 		end
 	end
@@ -762,14 +865,17 @@ end
 ---@param new_width integer
 ---@param new_height integer
 local function change_geometry(id, new_x, new_y, new_width, new_height)
-	local w = windows[id]
+	local w = id_to_window(id)
 	if w.x == new_x and w.y == new_y and w.width == new_width and w.height == new_height then
 		return
 	end
 
 	new_width = new_width < options.min_window_width and options.min_window_width or new_width
 	new_height = new_height < options.min_window_height and options.min_window_height or new_height
-	new_y = new_y + new_height - 1 > viewport_max_x - 2 and viewport_max_y - new_height - 1 or new_y
+
+	new_x = new_x + new_width - 1 > viewport_max_x and viewport_max_x - new_width + 1 or new_x
+	new_x = new_x < 1 and 1 or new_x
+	new_y = new_y + new_height - 1 > viewport_max_y - 2 and viewport_max_y - new_height - 1 or new_y
 	new_y = new_y < 1 and 1 or new_y
 
 	w.geometry_lock:acquire()
@@ -807,16 +913,18 @@ local function change_geometry(id, new_x, new_y, new_width, new_height)
 					rect.y - w.y + 1
 				)
 			end
-			gpu.bitblt(
-				tmp_buffer,
-				w.x - new_x + 1 > 0 and w.x - new_x + 1 or 1,
-				w.y - new_y + 1 > 0 and w.y - new_y + 1 or 1,
-				intersection.width,
-				intersection.height,
-				w.screen_buffer,
-				intersection.x - w.x + 1,
-				intersection.y - w.y + 1
-			)
+			if tmp_buffer then
+				gpu.bitblt(
+					tmp_buffer,
+					w.x - new_x + 1 > 0 and w.x - new_x + 1 or 1,
+					w.y - new_y + 1 > 0 and w.y - new_y + 1 or 1,
+					intersection.width,
+					intersection.height,
+					w.screen_buffer,
+					intersection.x - w.x + 1,
+					intersection.y - w.y + 1
+				)
+			end
 			gpu.freeBuffer(w.screen_buffer)
 		else
 			for _, rect in pairs(rects) do
@@ -826,9 +934,7 @@ local function change_geometry(id, new_x, new_y, new_width, new_height)
 		try_redraw(id, rects)
 	end
 
-	if tmp_buffer then
-		w.screen_buffer = tmp_buffer
-	end
+	w.screen_buffer = tmp_buffer
 
 	local top, bottom, left, right = get_toolbar_sizes()
 
@@ -844,7 +950,7 @@ end
 
 ---@param id integer
 local function maximize(id)
-	local w = windows[id]
+	local w = id_to_window(id)
 	local max_y = viewport_max_y - 2
 
 	if w.maximized then
@@ -858,7 +964,7 @@ end
 
 ---@param id integer
 local function unmaximize(id)
-	local w = windows[id]
+	local w = id_to_window(id)
 	if not w.maximized then
 		return
 	end
@@ -906,7 +1012,7 @@ local function mouse_event_handler(event, x, y)
 	---@type integer
 	local id = mouse_event.window
 
-	local w = windows[id]
+	local w = id_to_window(id)
 	local offset_x = x - mouse_event.previous.x
 	local offset_y = y - mouse_event.previous.y
 
@@ -979,9 +1085,12 @@ local function mouse_event_handler(event, x, y)
 	end
 	if event == "drop" then
 		mouse_event.window = nil
-		draw_window(id)
+		if mouse_event.action ~= "move" then
+			draw_window(id)
+		end
 	else
 		draw_frame(id)
+		draw_title(id)
 	end
 	mouse_event.previous.x = x
 	mouse_event.previous.y = y
@@ -993,64 +1102,77 @@ end
 ---@param button 0|1
 ---@param scroll -1|1
 local function mouse_handler(event, x, y, button, scroll)
+	local function call(id, func, ...)
+		call_userspace(id, func, "internal", ...)
+	end
+
+	if options.debug then
+		print_debug_info()
+	end
+
 	if mouse_event.window ~= nil and event ~= "scroll" and (event ~= "touch" or mouse_event.action == "tile") then
-		mouse_event_handler(event, x, y)
+		call(mouse_event.window, mouse_event_handler, event, x, y)
+		draw_memory()
 		return
 	end
 
 	if y > viewport_max_y - 2 then
 		taskbar.mouse_handler(event, x, y)
+		draw_memory()
 		return
 	end
 
+	-- Iterate over every window in order to see if the even clicked any of them
 	for i = 1, #visible do
 		local id = visible[i]
-		local w = windows[id]
+		local w = id_to_window(id)
 		if x >= w.x and x < w.x + w.width and y >= w.y and y < w.y + w.height then
 			local top, bottom, left, _ = get_toolbar_sizes()
-			if id ~= 1 then
-				move_to_top(id)
-				draw_window(id)
+
+			call(id, move_to_top, id)
+
+			if i ~= 1 then
+				call(id, draw_window, id)
 			end
 
 			if y == w.y then -- clicked on top bar
 				if event == "touch" then
 					mouse_event.previous.x = x
 					mouse_event.previous.y = y
-					if x == w.x + w.width - 1 then
+					if x == w.x + w.width - 1 and not w.maximized then
 						mouse_event.window = id
 						mouse_event.action = "resize_top_right"
 					elseif x == w.x + w.width - 2 then
-						remove(i)
+						call(id, remove, id)
 					elseif x == w.x + w.width - 3 then
 						if w.maximized then
-							unmaximize(i)
+							call(id, unmaximize, id)
 						else
-							maximize(i)
+							call(id, maximize, id)
 						end
 					elseif x == w.x + w.width - 4 then
-						--minimize(i) TODO: The taskbar needs to be implemented
+						--call(id, minimize, i) TODO: The taskbar needs to be implemented
 					elseif x == w.x + w.width - 5 then
 						mouse_event.window = id
 						mouse_event.action = "tile"
 						show_tile_menu()
-					elseif x == w.x then
+					elseif x == w.x and not w.maximized then
 						mouse_event.window = id
 						mouse_event.action = "resize_top_left"
-					else
+					elseif not w.maximized then
 						mouse_event.window = id
 						mouse_event.action = "move"
 					end
 				end
 			elseif x == w.x then -- click in left bar, but not in top bar
-				if event == "touch" and y == w.y + w.height - 1 then
+				if event == "touch" and y == w.y + w.height - 1 and not w.maximized then
 					mouse_event.window = id
 					mouse_event.action = "resize_bottom_left"
 					mouse_event.previous.x = x
 					mouse_event.previous.y = y
 				end
 			elseif x == w.x + w.width - 1 then -- click in right bar, but not in top bar
-				if event == "touch" and y == w.y + w.height - 1 then
+				if event == "touch" and y == w.y + w.height - 1 and not w.maximized then
 					mouse_event.window = id
 					mouse_event.action = "resize_bottom_right"
 					mouse_event.previous.x = x
@@ -1059,18 +1181,20 @@ local function mouse_handler(event, x, y, button, scroll)
 			elseif x >= w.x + left and x <= w.x + w.width - left and y >= w.y + top and y < w.y + w.height - bottom then
 				local user_x, user_y = x - w.x + left - 1, y - w.y + top - 1
 				if event == "touch" and w.touch_handler then
-					call_userspace(id, w.touch_handler, "handler", w.window_handler, user_x, user_y, button)
+					call_userspace(id, w.touch_handler, "handler", user_x, user_y, button)
 				elseif event == "drag" and w.drag_handler then
-					call_userspace(id, w.drag_handler, "handler", w.window_handler, user_x, user_y, button)
+					call_userspace(id, w.drag_handler, "handler", user_x, user_y, button)
 				elseif event == "drop" and w.drop_handler then
-					call_userspace(id, w.drop_handler, "handler", w.window_handler, user_x, user_y, button)
+					call_userspace(id, w.drop_handler, "handler", user_x, user_y, button)
 				elseif event == "scroll" and w.scroll_handler then
-					call_userspace(id, w.scroll_handler, "handler", w.window_handler, user_x, user_y, scroll)
+					call_userspace(id, w.scroll_handler, "handler", user_x, user_y, scroll)
 				end
 			end
+			draw_memory()
 			return
 		end
 	end
+	draw_memory()
 end
 
 return {
@@ -1096,4 +1220,5 @@ return {
 	window_fill = window_fill,
 	window_print = window_print,
 	draw_desktop = draw_desktop,
+	draw_memory = draw_memory,
 }

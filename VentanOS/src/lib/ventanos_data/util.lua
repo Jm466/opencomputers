@@ -96,7 +96,7 @@ end
 ---@param message string Error message to print
 ---@param func function|nil Function that caused the error
 local function stack_trace(message, func)
-	local call_id = 3
+	local call_id = 2
 	local info
 
 	local gpu = require("component").gpu
