@@ -177,26 +177,24 @@ local function drop_handler(handle, x, y)
 	wm.call_userspace(handle.id, function()
 		handle:setTitle(app.name)
 
-		local app_env = handle.window.environment
-
-		loadfile(app.init_path, "t", app_env)() -- This is where the magic happens: The entry point
-
-		if app_env.flauta then
-			print("Flauta")
+		for i, v in pairs(handle.window.environment) do
+			_ENV[i] = v
 		end
 
-		if app_env.Redraw == nil then
+		require(app.init_path) -- This is where the magic happens: The entry point
+
+		if Redraw == nil then
 			error("When loading the application, function Redraw was not found in environment")
 		end
 
-		handle.window.redraw_handler = app_env.Redraw
-		handle.window.touch_handler = app_env.Touch
-		handle.window.drop_handler = app_env.Drop
-		handle.window.drag_handler = app_env.Drag
-		handle.window.scroll_handler = app_env.Scroll
+		handle.window.redraw_handler = Redraw
+		handle.window.touch_handler = Touch
+		handle.window.drop_handler = Drop
+		handle.window.drag_handler = Drag
+		handle.window.scroll_handler = Scroll
 
-		if app_env.Main then
-			app_env.Main() -- This is it, the real deal, the actual entry point(if it has one anyway)
+		if Main then
+			Main() -- This is it, the real deal, the actual entry point(if it has one anyway)
 		end
 
 		handle.window.redraw_handler()
