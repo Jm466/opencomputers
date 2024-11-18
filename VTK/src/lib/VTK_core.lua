@@ -38,7 +38,7 @@ local function array_add(array, value, next_free, n_elements)
 			end
 		end
 	else
-		array.components_array[next_free] = value
+		array[next_free] = value
 		return next_free
 	end
 end

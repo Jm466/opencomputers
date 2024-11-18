@@ -186,7 +186,7 @@ local function drop_handler(handle, x, y)
 		end
 
 		if app_env.Redraw == nil then
-			error("When loading the application, function redraw_handler was not found in environment")
+			error("When loading the application, function Redraw was not found in environment")
 		end
 
 		handle.window.redraw_handler = app_env.Redraw

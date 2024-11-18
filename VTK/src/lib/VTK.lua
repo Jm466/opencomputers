@@ -31,19 +31,19 @@ vtk.init = function()
 
 	INIT_CALLED = true
 
-	for func in { "Redraw", "Touch", "Drop", "Drag", "Scroll" } do
-		if _ENV.value then
+	for func in pairs({ "Redraw", "Touch", "Drop", "Drag", "Scroll" }) do
+		if _ENV.func then
 			error("Function " .. func .. "() already defined by user")
 		end
 	end
 
 	local frame = new_frame()
 
-	Redraw = frame.redraw_handler
-	Touch = frame.touch_handler
-	Drop = frame.drop_handler
-	Drag = frame.drag_handler
-	Scroll = frame.scroll_handler
+	_ENV.Redraw = frame.redraw_handler
+	_ENV.Touch = frame.touch_handler
+	_ENV.Drop = frame.drop_handler
+	_ENV.Drag = frame.drag_handler
+	_ENV.Scroll = frame.scroll_handler
 
 	return frame
 end
