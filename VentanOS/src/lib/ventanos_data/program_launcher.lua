@@ -181,7 +181,7 @@ local function drop_handler(handle, x, y)
 			_ENV[i] = v
 		end
 
-		require(app.init_path) -- This is where the magic happens: The entry point
+		loadfile(app.init_path)() -- This is where the magic happens: The entry point
 
 		if Redraw == nil then
 			error("When loading the application, function Redraw was not found in environment")
