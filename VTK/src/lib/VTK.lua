@@ -39,21 +39,11 @@ vtk.init = function()
 
 	local frame = new_frame()
 
-	Redraw = function()
-		frame.redraw_handler()
-	end
-	Touch = function(x, y, button)
-		frame.touch_handler(x, y, button)
-	end
-	Drop = function(x, y, button)
-		frame.drop_handler(x, y, button)
-	end
-	Drag = function(x, y, button)
-		frame.drag_handler(x, y, button)
-	end
-	Scroll = function(x, y, direction)
-		frame.scroll_handler(x, y, direction)
-	end
+	Redraw = frame.redraw_handler
+	Touch = frame.touch_handler
+	Drop = frame.drop_handler
+	Drag = frame.drag_handler
+	Scroll = frame.scroll_handler
 
 	return frame
 end
@@ -66,17 +56,14 @@ vtk.new_window = function(title)
 	local frame = new_frame()
 
 	return frame,
-		ventanos.new(title, function()
-			frame.redraw_handler()
-		end, function(x, y, button)
-			frame.touch_handler(x, y, button)
-		end, function(x, y, button)
-			frame.drop_handler(x, y, button)
-		end, function(x, y, button)
-			frame.drag_handler(x, y, button)
-		end, function(x, y, direction)
-			frame.scroll_handler(x, y, direction)
-		end)
+		ventanos.new(
+			title,
+			frame.redraw_handler,
+			frame.touch_handler,
+			frame.drop_handler,
+			frame.drag_handler,
+			frame.scroll_handler
+		)
 end
 
 return vtk

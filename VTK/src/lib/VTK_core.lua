@@ -1,4 +1,4 @@
-local vtk_core
+local vtk_core = {}
 
 ---@class Component
 ---@field x integer -- Coordinates relative to the window not to the panel that may contain the object
@@ -126,6 +126,9 @@ end
 ---@field components fun(): (fun(): Component)
 vtk_core.new_panel = function()
 	local panel = vtk_core.new_component() ---@class Panel
+
+	panel.layout = "box"
+	panel.layout_oritentation = "horizontal"
 
 	panel.components_array = {}
 	panel.next_free = 0

@@ -56,24 +56,23 @@ local function seek_programs()
 					elseif segments[#segments] == "name" then
 						has_name = true
 					end
-					if has_init and has_name then
-						local name = get_app_name(cannonical_file)
-						local logo
-						if has_logo then
-							logo = fs.concat(cannonical_file, "logo.ppm")
-						else
-							logo = default_logo
-						end
-						if name == nil then
-							break
-						end
-						programs[#programs + 1] = {
-							name = name,
-							logo_path = logo,
-							init_path = fs.concat(cannonical_file, "init.lua"),
-						}
+				end
+				if has_init and has_name then
+					local name = get_app_name(cannonical_file)
+					local logo
+					if has_logo then
+						logo = fs.concat(cannonical_file, "logo.ppm")
+					else
+						logo = default_logo
+					end
+					if name == nil then
 						break
 					end
+					programs[#programs + 1] = {
+						name = name,
+						logo_path = logo,
+						init_path = fs.concat(cannonical_file, "init.lua"),
+					}
 				end
 			end
 		end
