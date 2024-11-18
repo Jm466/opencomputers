@@ -5,6 +5,7 @@ return function()
 
 	term.setCursor(1, 1)
 
+	wm.start()
 	wm.draw_desktop()
 	wm.draw_memory()
 

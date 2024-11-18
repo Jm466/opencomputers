@@ -71,6 +71,12 @@ local windows = {} -- Unordered list that contains all the windows
 ---@type integer[]
 local visible = {} -- List of window id's ordered by visibility(the first one is on top of the rest, the second one is on top of everyone but the first and so on)
 
+local function start()
+	gpu.freeAllBuffers()
+	windows = {}
+	visible = {}
+end
+
 local last_window_id = 1
 ---@return integer
 local function get_new_window_id()
@@ -1198,6 +1204,7 @@ local function mouse_handler(event, x, y, button, scroll)
 end
 
 return {
+	start = start,
 	insert_window = insert_window,
 	move_to_top = move_to_top,
 	minimize = minimize,
