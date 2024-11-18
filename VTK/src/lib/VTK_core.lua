@@ -223,10 +223,11 @@ vtk_core.new_panel = function()
 		-- We get the settings of each components in this convoluted way in order to call get() only once for each setting
 		local components_settings = {}
 		local function get_component_settings(settings, horizontal_agregator, vertical_agregator)
-			for setting in settings do
+			local agregator = panel.layout_oritentation == "horizontal" and horizontal_agregator or vertical_agregator
+			for setting in pairs(settings) do
 				local i, value = 0, 0
-				local agregator = panel.layout_oritentation == "horizontal" and horizontal_agregator
-					or vertical_agregator
+
+				components_settings[setting] = {}
 
 				for comp in panel.components() do
 					i = i + 1
@@ -235,7 +236,7 @@ vtk_core.new_panel = function()
 					value = agregator(value, field)
 				end
 
-				components_settings[settings].value = value
+				components_settings[setting].value = value
 			end
 		end
 

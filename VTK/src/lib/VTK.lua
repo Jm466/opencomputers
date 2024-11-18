@@ -25,11 +25,11 @@ end
 --- Creates a frame for the window. Cannot be called more than once and must be called outside of the main function
 ---@return Frame
 vtk.init = function()
-	if INIT_CALLED then
+	if _ENV.INIT_CALLED then
 		error("init() cannot be called more than once")
 	end
 
-	INIT_CALLED = true
+	_ENV.INIT_CALLED = true
 
 	for func in pairs({ "Redraw", "Touch", "Drop", "Drag", "Scroll" }) do
 		if _ENV.func then
