@@ -11,8 +11,8 @@ local function new_frame()
 
 	frame.background_color = 0x79797
 
-	local true_redraw = frame.redraw
-	frame.redraw = function()
+	local true_redraw = frame.redraw_handler
+	frame.redraw_handler = function()
 		_ENV.setBackground(frame.background_color)
 		_ENV.fill()
 
@@ -25,13 +25,7 @@ end
 --- Creates a frame for the window. Cannot be called more than once and must be called outside of the main function
 ---@return Frame
 vtk.init = function()
-	if _ENV.INIT_CALLED then
-		error("init() cannot be called more than once")
-	end
-
-	_ENV.INIT_CALLED = true
-
-	for func in pairs({ "Redraw", "Touch", "Drop", "Drag", "Scroll" }) do
+	for _, func in pairs({ "Redraw", "Touch", "Drop", "Drag", "Scroll" }) do
 		if _ENV.func then
 			error("Function " .. func .. "() already defined by user")
 		end

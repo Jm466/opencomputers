@@ -27,35 +27,17 @@ vtk_core.new_component = function()
 	}
 end
 
----@return integer next_free
-local function array_add(array, value, next_free, n_elements)
-	if n_elements < next_free then
-		array[next_free] = value
-		while true do
-			next_free = next_free + 1
-			if array[next_free] then
-				return next_free
-			end
-		end
-	else
-		array[next_free] = value
-		return next_free
-	end
-end
-
----@return integer next_free
 ---@return boolean success
-local function array_remove(array, value, next_free, n_elements)
-	for i = 1, n_elements do
+local function array_remove(array, value)
+	for i = 1, #array do
 		if array[i] == value then
-			array[i] = nil
-			if i < next_free then
-				next_free = i
+			for j = i, #array do
+				array[j] = array[j + 1]
 			end
-			return next_free, true
+			return true
 		end
 	end
-	return next_free, false
+	return false
 end
 
 ---@class ClickableComponent: Component
@@ -68,36 +50,22 @@ end
 vtk_core.new_clickable_component = function()
 	local clickable = vtk_core.new_component() ---@class ClickableComponent
 
-	local n_press, n_release = 0, 0
-
 	clickable.press_listeners, clickable.release_listeners = {}, {}
-	clickable.next_free_press, clickable.next_free_release = 0, 0
 
 	clickable.add_press_listener = function(func)
-		clickable.next_free_press = array_add(clickable.press_listeners, func, clickable.next_free_press, n_press)
-		n_press = n_press + 1
+		clickable.press_listeners[#clickable.press_listeners + 1] = func
 	end
 
 	clickable.remove_press_listener = function(func)
-		local result
-		clickable.next_free_press, result =
-			array_remove(clickable.press_listeners, func, clickable.next_free_press, n_press)
-		n_press = n_press - 1
-		return result
+		return array_remove(clickable.press_listeners, func)
 	end
 
 	clickable.add_release_listener = function(func)
-		clickable.next_free_release =
-			array_add(clickable.release_listeners, func, clickable.next_free_release, n_release)
-		n_release = n_release + 1
+		clickable.release_listeners[#clickable.release_listeners + 1] = func
 	end
 
 	clickable.remove_release_listener = function(func)
-		local result
-		clickable.next_free_release, result =
-			array_remove(clickable.release_listeners, func, clickable.next_free_release, n_release)
-		n_release = n_release - 1
-		return result
+		return array_remove(clickable.release_listeners, func)
 	end
 
 	clickable.press = function()
@@ -138,36 +106,22 @@ vtk_core.new_panel = function()
 		panel.layout_oritentation = orientation
 	end
 
-	local n_components = 0
-
 	panel.add_component = function(comp)
-		panel.next_free = array_add(panel.components_array, comp, panel.next_free, n_components)
-		n_components = n_components + 1
+		panel.components_array[#panel.components_array + 1] = comp
 	end
 
 	panel.remove_component = function(comp)
-		local result
-		panel.next_free, result = array_remove(panel.components_array, comp, panel.next_free, n_components)
-		n_components = n_components - 1
-		return result
+		return array_remove(panel.components_array, comp)
 	end
 
 	panel.set_component = function(comp, position)
-		if panel.components_array[position] ~= nil then
-			n_components = n_components - 1
-		end
 		panel.components_array[position] = comp
 	end
 
 	panel.components = function()
-		local i = 1
+		local i = 0
 		return function()
-			while panel.components_array[i] == nil do
-				if i > n_components then
-					return nil
-				end
-				i = i + 1
-			end
+			i = i + 1
 			return panel.components_array[i]
 		end
 	end
@@ -224,7 +178,7 @@ vtk_core.new_panel = function()
 		local components_settings = {}
 		local function get_component_settings(settings, horizontal_agregator, vertical_agregator)
 			local agregator = panel.layout_oritentation == "horizontal" and horizontal_agregator or vertical_agregator
-			for setting in pairs(settings) do
+			for _, setting in pairs(settings) do
 				local i, value = 0, 0
 
 				components_settings[setting] = {}
@@ -241,7 +195,7 @@ vtk_core.new_panel = function()
 		end
 
 		get_component_settings({ "pref_width", "min_width", "max_width" }, sum, math.max)
-		get_component_settings({ "pref_height", "max_height", "max_height" }, math.max, sum)
+		get_component_settings({ "pref_height", "min_height", "max_height" }, math.max, sum)
 
 		if panel.layout == "box" then
 			local setting, setting2, pref, min, max, max2, coor1, coor2, current_dim
@@ -258,7 +212,7 @@ vtk_core.new_panel = function()
 				coor2 = "x"
 			end
 
-			pref = "preferred_" .. setting
+			pref = "pref_" .. setting
 			max, max2 = "max_" .. setting, "max_" .. setting2
 			min = "min_" .. setting
 
@@ -267,7 +221,7 @@ vtk_core.new_panel = function()
 			local i, pos = 0, panel[coor1]
 			for component in panel.components() do
 				i = i + 1
-				local offset = math.ceil((panel[setting] - current_dim) / (n_components - i + 1))
+				local offset = math.ceil((panel[setting] - current_dim) / (#panel.components_array - i + 1))
 
 				if components_settings[max][i] < components_settings[pref][i] + offset then
 					component[setting] = components_settings[max][i]
