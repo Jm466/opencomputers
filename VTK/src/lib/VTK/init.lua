@@ -1,5 +1,5 @@
 local ventanos = require("ventanos")
-local core = require("VTK_core")
+local core = require("VTK/core")
 
 local vtk = {}
 

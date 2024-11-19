@@ -89,6 +89,7 @@ end
 ---@field private layout "box"
 ---@field private layout_orientation "vertical"|"horizontal"
 ---@field private components_array Component[]
+---@field scrollable boolean
 ---@field set_layout fun(type: "box", orientation: "vertical"|"horizontal") -- https://docs.oracle.com/javase/tutorial/uiswing/layout/visual.html
 ---@field add_component fun(comp: Component)
 ---@field set_component fun(comp: Component, position: integer)
@@ -99,6 +100,8 @@ vtk_core.new_panel = function()
 
 	panel.layout = "box"
 	panel.layout_orientation = "horizontal"
+	panel.scrollable = true
+	panel.scroll_state = 0
 
 	panel.components_array = {}
 	panel.next_free = 0
@@ -174,18 +177,10 @@ vtk_core.new_panel = function()
 		end
 	end
 
-	local last_x, last_y, last_width, last_height
-	--- Sets the x, y, width and height of all components if needed
-	local function check_rearrange()
-		if last_x == panel.x and last_y == panel.y and last_width == panel.width and last_height == panel.height then
-			return
-		end
-
-		-- The components at the start of the array have priority over the ones at the end
-
-		-- We get the settings of each components in this convoluted way in order to call get() only once for each setting
+	-- We get the settings of each components in this convoluted way in order to call get() only once for each setting
+	local function get_components_settings()
 		local components_settings = {}
-		local function get_component_settings(settings, horizontal_agregator, vertical_agregator)
+		local function fetch(settings, horizontal_agregator, vertical_agregator)
 			local agregator = panel.layout_orientation == "horizontal" and horizontal_agregator or vertical_agregator
 			for _, setting in pairs(settings) do
 				local i, value = 0, 0
@@ -202,51 +197,121 @@ vtk_core.new_panel = function()
 				components_settings[setting].value = value
 			end
 		end
+		fetch({ "pref_width", "min_width", "max_width" }, sum, math.max)
+		fetch({ "pref_height", "min_height", "max_height" }, math.max, sum)
+		return components_settings
+	end
 
-		get_component_settings({ "pref_width", "min_width", "max_width" }, sum, math.max)
-		get_component_settings({ "pref_height", "min_height", "max_height" }, math.max, sum)
+	local last_x, last_y, last_width, last_height, last_scroll
+	--- Sets the x, y, width and height of all components if needed
+	local function check_rearrange_without_scroll()
+		if last_x == panel.x and last_y == panel.y and last_width == panel.width and last_height == panel.height then
+			return
+		end
+
+		last_x, last_y, last_width, last_height = panel.x, panel.y, panel.width, panel.height
+
+		-- The components at the start of the array have priority over the ones at the end
+		local components_settings = get_components_settings()
 
 		if panel.layout == "box" then
-			local setting, setting2, min, max, max2, coor1, coor2, space_asked
+			local dim1, dim2, min1, max1, max2, coor1, coor2, space_asked
 
 			if panel.layout_orientation == "horizontal" then
-				setting = "width"
-				setting2 = "height"
+				dim1 = "width"
+				dim2 = "height"
 				coor1 = "x"
 				coor2 = "y"
 			else
-				setting = "height"
-				setting2 = "width"
+				dim1 = "height"
+				dim2 = "width"
 				coor1 = "y"
 				coor2 = "x"
 			end
 
-			max, max2 = "max_" .. setting, "max_" .. setting2
-			min = "min_" .. setting
+			max1, max2 = "max_" .. dim1, "max_" .. dim2
+			min1 = "min_" .. dim1
 
-			space_asked = panel[setting]
+			space_asked = panel[dim1]
 
 			local i, pos = 0, panel[coor1]
 			for component in panel.components() do
 				i = i + 1
-				local offset = math.ceil(math.min(panel[setting], space_asked) / (#panel.components_array - i + 1))
+				local offset = math.ceil(math.min(panel[dim1], space_asked) / (#panel.components_array - i + 1))
 
-				if components_settings[max][i] < offset then
-					component[setting] = components_settings[max][i]
-				elseif components_settings[min][i] > offset then
-					component[setting] = components_settings[min][i]
+				if components_settings[max1][i] < offset then
+					component[dim1] = components_settings[max1][i]
+				elseif components_settings[min1][i] > offset then
+					component[dim1] = components_settings[min1][i]
 				else
-					component[setting] = offset
+					component[dim1] = offset
 				end
-				space_asked = space_asked - component[setting]
+				space_asked = space_asked - component[dim1]
 
-				component[setting2] = math.min(panel[setting2], components_settings[max2][i])
+				component[dim2] = math.min(panel[dim2], components_settings[max2][i])
 
 				component[coor1] = pos
 				component[coor2] = panel[coor2]
 
-				pos = pos + component[setting]
+				pos = pos + component[dim1]
 			end
+		else
+			error("Unsuported layout:" .. panel.layout)
+		end
+	end
+
+	local function check_rearrange_with_scroll()
+		if
+			last_x == panel.x
+			and last_y == panel.y
+			and last_width == panel.width
+			and last_height == panel.height
+			and last_scroll == panel.scroll_state
+		then
+			return
+		end
+
+		last_x, last_y, last_width, last_height, last_scroll =
+			panel.x, panel.y, panel.width, panel.height, panel.scroll_state
+
+		local components_settings = get_components_settings() -- A bit uneficient asking for all settings when we only need max and pref
+
+		if panel.layout == "box" then
+			local coor1, coor2, dim1, dim2, pref1, max2
+			if panel.layout_orientation == "horizontal" then
+				coor1 = "x"
+				coor2 = "y"
+				dim1 = "width"
+				dim2 = "height"
+			else
+				coor1 = "y"
+				coor2 = "x"
+				dim1 = "height"
+				dim2 = "width"
+			end
+
+			pref1 = "pref_" .. dim1
+			max2 = "max_" .. dim2
+
+			local offset, i = 0, 0
+			for component in panel.components() do
+				i = i + 1
+				component[coor1] = panel[coor1] + offset
+				component[coor2] = panel[coor2]
+				component[dim1] = components_settings[pref1][i]
+				component[dim2] = math.min(components_settings[max2][i], panel[dim2] - 1)
+				offset = offset + component[dim1]
+			end
+		else
+			error("Unsuported layout:" .. panel.layout)
+		end
+	end
+
+	local function check_rearrange()
+		if panel.scrollable then
+			check_rearrange_with_scroll()
+		else
+			check_rearrange_without_scroll()
 		end
 	end
 
@@ -267,19 +332,45 @@ vtk_core.new_panel = function()
 	panel.touch_handler = handler_dispatcher("touch_handler")
 	panel.drop_handler = handler_dispatcher("drop_handler")
 	panel.drag_handler = handler_dispatcher("drag_handler")
-	panel.scroll_handler = handler_dispatcher("scroll_handler")
+
+	local scroll_handler = handler_dispatcher("scroll_handler")
+	panel.scroll_handler = function(x, y, direcction)
+		if panel.scrollable then
+			panel.scroll_state = panel.scroll_state + direcction
+			panel.redraw_handler()
+		else
+			scroll_handler(x, y, direcction)
+		end
+	end
 
 	panel.redraw_handler = function()
 		check_rearrange()
 
-		for comp in panel.components() do
-			if
-				comp.width >= comp.min_width
-				and comp.height >= comp.min_height
-				and comp.x + comp.width <= panel.x + panel.width
-				and comp.y + comp.height <= panel.y + panel.height
-			then
-				comp.redraw_handler()
+		if panel.scrollable then
+			for comp in panel.components() do
+				if
+					comp.width >= comp.min_width
+					and comp.height >= comp.min_height
+					and comp.x >= panel.x
+					and comp.y >= panel.y
+					and comp.x + comp.width <= panel.x + panel.width
+					and comp.y + comp.height <= panel.y + panel.height
+				then
+					comp.redraw_handler()
+				end
+			end
+		else
+			local field = panel.layout_orientation == "horizontal" and "x" or "y"
+			for comp in panel.components() do
+				if
+					comp.width >= comp.min_width
+					and comp.height >= comp.min_height
+					and comp[field] >= panel[field] + panel.scroll_state
+					and comp.x + comp.width <= panel.x + panel.width
+					and comp.y + comp.height <= panel.y + panel.height
+				then
+					comp.redraw_handler()
+				end
 			end
 		end
 	end

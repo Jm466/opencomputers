@@ -1,4 +1,4 @@
-local vtk = require("VTK_core")
+local vtk = require("VTK/core")
 
 local vtk_text_area = {}
 
