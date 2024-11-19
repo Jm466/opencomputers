@@ -21,17 +21,18 @@ local function wrap(func, ...)
 end
 
 local last_drag = 0
+local registered = {}
 local function start()
 	event.onError = function(...)
 		gpu.setBackground(16711680)
 		gpu.setForeground(16777215)
 		print(...)
 	end
-	event.listen("touch", function(_event, _, x, y, button)
+	registered.touch = event.listen("touch", function(_event, _, x, y, button)
 		wrap(wm.mouse_handler, _event, x, y, button)
 	end)
 
-	event.listen("drag", function(_event, _, x, y, button)
+	registered.drag = event.listen("drag", function(_event, _, x, y, button)
 		local current_time = os.time()
 		if current_time - last_drag < drag_min_time_ms then
 			return
@@ -40,15 +41,22 @@ local function start()
 		last_drag = current_time
 		wrap(wm.mouse_handler, _event, x, y, button)
 	end)
-	event.listen("drop", function(_event, _, x, y, button)
+	registered.drop = event.listen("drop", function(_event, _, x, y, button)
 		last_drag = 0
 		wrap(wm.mouse_handler, _event, x, y, button)
 	end)
-	event.listen("scroll", function(_event, _, x, y, direction)
+	registered.listen = event.listen("scroll", function(_event, _, x, y, direction)
 		wrap(wm.mouse_handler, _event, x, y, 0, direction)
 	end)
 end
 
+local function stop()
+	for _, id in pairs(registered) do
+		event.cancel(id)
+	end
+end
+
 return {
 	start = start,
+	stop = stop,
 }

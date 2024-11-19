@@ -538,9 +538,6 @@ function call_userspace(id, user_function, type, ...)
 			return error
 		end
 
-		gpu.setBackground(skin.user_crash_background)
-		gpu.setForeground(skin.user_crash)
-
 		local info = debug.getinfo(user_function)
 
 		if w.geometry_lock:is_locked() then
@@ -554,6 +551,8 @@ function call_userspace(id, user_function, type, ...)
 		w.drag_handler = nil
 		w.scroll_handler = nil
 		w.redraw_handler = function()
+			gpu.setBackground(skin.user_crash_background)
+			gpu.setForeground(skin.user_crash)
 			w.cursor_x = 1
 			w.cursor_y = 1
 			window_fill(id, 1, 1, w.viewport_width, w.viewport_height, " ")

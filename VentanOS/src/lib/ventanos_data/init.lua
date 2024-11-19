@@ -11,7 +11,9 @@ return function()
 
 	events.start()
 
-	while true do
-		os.sleep(math.huge)
-	end
+	require("event").pull(_, "interrupted")
+
+	print("interrupted!")
+
+	events.stop()
 end

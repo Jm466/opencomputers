@@ -16,6 +16,8 @@ local function new_frame()
 		_ENV.setBackground(frame.background_color)
 		_ENV.fill()
 
+		frame.width, frame.height = getViewport()
+
 		true_redraw()
 	end
 

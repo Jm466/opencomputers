@@ -5,8 +5,8 @@ local vtk_core = {}
 ---@field y integer
 ---@field width integer
 ---@field height integer
----@field preferred_width nil|integer|fun():integer
----@field preferred_height nil|integer|fun():integer
+---@field pref_width nil|integer|fun():integer
+---@field pref_height nil|integer|fun():integer
 ---@field min_width integer|fun():integer
 ---@field min_height integer|fun():integer
 ---@field max_width integer|fun():integer
@@ -20,6 +20,8 @@ vtk_core.new_component = function()
 	return {
 		x = 1,
 		y = 1,
+		pref_width = 5,
+		pref_height = 5,
 		min_width = 0,
 		min_height = 0,
 		max_width = math.huge,
@@ -69,13 +71,13 @@ vtk_core.new_clickable_component = function()
 	end
 
 	clickable.press = function()
-		for listener in clickable.press_listeners do
+		for _, listener in pairs(clickable.press_listeners) do
 			listener()
 		end
 	end
 
 	clickable.release = function()
-		for listener in clickable.release_listeners do
+		for _, listener in pairs(clickable.release_listeners) do
 			listener()
 		end
 	end
@@ -85,7 +87,7 @@ end
 
 ---@class Panel: Component
 ---@field private layout "box"
----@field private layout_oritentation "vertical"|"horizontal"
+---@field private layout_orientation "vertical"|"horizontal"
 ---@field private components_array Component[]
 ---@field set_layout fun(type: "box", orientation: "vertical"|"horizontal") -- https://docs.oracle.com/javase/tutorial/uiswing/layout/visual.html
 ---@field add_component fun(comp: Component)
@@ -96,14 +98,14 @@ vtk_core.new_panel = function()
 	local panel = vtk_core.new_component() ---@class Panel
 
 	panel.layout = "box"
-	panel.layout_oritentation = "horizontal"
+	panel.layout_orientation = "horizontal"
 
 	panel.components_array = {}
 	panel.next_free = 0
 
 	panel.set_layout = function(type, orientation)
 		panel.layout = type
-		panel.layout_oritentation = orientation
+		panel.layout_orientation = orientation
 	end
 
 	panel.add_component = function(comp)
@@ -127,16 +129,23 @@ vtk_core.new_panel = function()
 	end
 
 	local function get(component, field)
+		local result
 		if type(component[field]) == "function" then
-			return component[field]()
+			result = component[field]()
+		else
+			result = component[field]
 		end
-		return component[field]
+		if field:sub(1, 4) == "pref" and result == nil then
+			result = get(component, "min_" .. field:sub(5))
+		end
+
+		return result
 	end
 
 	local function field_getter_constructor(field, horizontal_agregator, vertical_agregator)
 		return function()
 			local return_value = 0
-			local agregator = panel.layout_oritentation == "horizontal" and horizontal_agregator or vertical_agregator
+			local agregator = panel.layout_orientation == "horizontal" and horizontal_agregator or vertical_agregator
 
 			for comp in panel.components() do
 				return_value = agregator(return_value, get(comp, field))
@@ -150,8 +159,8 @@ vtk_core.new_panel = function()
 		return a + b
 	end
 
-	panel.preferred_width = field_getter_constructor("preferred_width", sum, math.max)
-	panel.preferred_height = field_getter_constructor("preferred_height", math.max, sum)
+	panel.pref_width = field_getter_constructor("pref_width", sum, math.max)
+	panel.pref_height = field_getter_constructor("pref_height", math.max, sum)
 	panel.min_width = field_getter_constructor("min_width", sum, math.max)
 	panel.min_height = field_getter_constructor("min_height", math.max, sum)
 	panel.max_width = field_getter_constructor("max_width", sum, math.max)
@@ -177,7 +186,7 @@ vtk_core.new_panel = function()
 		-- We get the settings of each components in this convoluted way in order to call get() only once for each setting
 		local components_settings = {}
 		local function get_component_settings(settings, horizontal_agregator, vertical_agregator)
-			local agregator = panel.layout_oritentation == "horizontal" and horizontal_agregator or vertical_agregator
+			local agregator = panel.layout_orientation == "horizontal" and horizontal_agregator or vertical_agregator
 			for _, setting in pairs(settings) do
 				local i, value = 0, 0
 
@@ -198,9 +207,9 @@ vtk_core.new_panel = function()
 		get_component_settings({ "pref_height", "min_height", "max_height" }, math.max, sum)
 
 		if panel.layout == "box" then
-			local setting, setting2, pref, min, max, max2, coor1, coor2, current_dim
+			local setting, setting2, min, max, max2, coor1, coor2, space_asked
 
-			if panel.layout_oritentation == "horizontal" then
+			if panel.layout_orientation == "horizontal" then
 				setting = "width"
 				setting2 = "height"
 				coor1 = "x"
@@ -212,32 +221,29 @@ vtk_core.new_panel = function()
 				coor2 = "x"
 			end
 
-			pref = "pref_" .. setting
 			max, max2 = "max_" .. setting, "max_" .. setting2
 			min = "min_" .. setting
 
-			current_dim = components_settings[pref].value
+			space_asked = panel[setting]
 
 			local i, pos = 0, panel[coor1]
 			for component in panel.components() do
 				i = i + 1
-				local offset = math.ceil((panel[setting] - current_dim) / (#panel.components_array - i + 1))
+				local offset = math.ceil(math.min(panel[setting], space_asked) / (#panel.components_array - i + 1))
 
-				if components_settings[max][i] < components_settings[pref][i] + offset then
+				if components_settings[max][i] < offset then
 					component[setting] = components_settings[max][i]
-					current_dim = current_dim - components_settings[max][i]
-				elseif components_settings[min][i] > components_settings[pref][i] + offset then
+				elseif components_settings[min][i] > offset then
 					component[setting] = components_settings[min][i]
-					current_dim = current_dim - components_settings[min][i]
 				else
-					component[setting] = components_settings[pref][i] + offset
-					current_dim = current_dim - components_settings[pref][i] - offset
+					component[setting] = offset
 				end
+				space_asked = space_asked - component[setting]
 
-				components_settings[setting2] = math.min(panel[setting2], components_settings[max2][i])
+				component[setting2] = math.min(panel[setting2], components_settings[max2][i])
 
 				component[coor1] = pos
-				component[coor2] = panel[coor2] + math.floor(component[setting2] / 2)
+				component[coor2] = panel[coor2]
 
 				pos = pos + component[setting]
 			end
@@ -252,7 +258,9 @@ vtk_core.new_panel = function()
 				return
 			end
 
-			comp[handler](x, y, ...)
+			if comp[handler] then
+				comp[handler](x, y, ...)
+			end
 		end
 	end
 
@@ -265,7 +273,12 @@ vtk_core.new_panel = function()
 		check_rearrange()
 
 		for comp in panel.components() do
-			if comp.width >= comp.min_width and comp.height >= comp.min_height then
+			if
+				comp.width >= comp.min_width
+				and comp.height >= comp.min_height
+				and comp.x + comp.width <= panel.x + panel.width
+				and comp.y + comp.height <= panel.y + panel.height
+			then
 				comp.redraw_handler()
 			end
 		end

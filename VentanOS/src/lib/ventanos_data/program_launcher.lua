@@ -34,10 +34,7 @@ local function get_app_name(app_directory)
 	local file = fs.open(fs.concat(app_directory, "name"))
 	local name = file:read(200) ---@type string
 	file:close()
-	if not name then
-		return
-	end
-	return name:sub(1, name:len() - 1)
+	return name
 end
 
 local programs = {} ---@type {name: string, logo_path: string, init_path: string}[]
@@ -196,9 +193,9 @@ local function drop_handler(handle, x, y)
 		if Main then
 			Main() -- This is it, the real deal, the actual entry point(if it has one anyway)
 		end
-
-		handle.window.redraw_handler()
 	end, "main")
+
+	wm.call_userspace(handle.id, handle.window.redraw_handler, "handler")
 end
 return function()
 	local ventanos_api = require("ventanos")
