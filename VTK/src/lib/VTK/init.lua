@@ -4,24 +4,24 @@ local core = require("VTK/core")
 local vtk = {}
 
 ---@class Frame: Panel
----@field background_color integer
----@field foreground_color integer
-local function new_frame()
-	local frame = core.new_panel()
+---@field background_color integer?
+---@field new fun(f: Frame, o: table?): Frame
+local Frame = core.new_panel({
+	parent_background = 0x797979,
+})
 
-	frame.background_color = 0x79797
+Frame.true_redraw = Frame.redraw_handler
+function Frame:redraw_handler()
+	_ENV.setBackground(self.background_color and self.background_color or self.parent_background)
+	self.fill()
 
-	local true_redraw = frame.redraw_handler
-	frame.redraw_handler = function()
-		_ENV.setBackground(frame.background_color)
-		_ENV.fill()
+	self.width, self.height = _ENV.getViewport()
 
-		frame.width, frame.height = getViewport()
+	self:true_redraw()
+end
 
-		true_redraw()
-	end
-
-	return frame
+local function new_frame(o)
+	return Frame:new(o)
 end
 
 --- Creates a frame for the window. Cannot be called more than once and must be called outside of the main function
@@ -35,11 +35,35 @@ vtk.init = function()
 
 	local frame = new_frame()
 
-	_ENV.Redraw = frame.redraw_handler
-	_ENV.Touch = frame.touch_handler
-	_ENV.Drop = frame.drop_handler
-	_ENV.Drag = frame.drag_handler
-	_ENV.Scroll = frame.scroll_handler
+	frame.set = function(...)
+		_ENV.WINDOW_HANDLE:set(...)
+	end
+	frame.fill = function(...)
+		_ENV.WINDOW_HANDLE:fill(...)
+	end
+	frame.copy = function(...)
+		_ENV.WINDOW_HANDLE:copy(...)
+	end
+
+	_ENV.set = nil
+	_ENV.fill = nil
+	_ENV.copy = nil
+
+	_ENV.Redraw = function()
+		frame:redraw_handler()
+	end
+	_ENV.Touch = function(...)
+		frame:touch_handler(...)
+	end
+	_ENV.Drop = function(...)
+		frame:drop_handler(...)
+	end
+	_ENV.Drag = function(...)
+		frame:drag_handler(...)
+	end
+	_ENV.Scroll = function(...)
+		frame:scroll_handler(...)
+	end
 
 	return frame
 end
@@ -51,15 +75,31 @@ end
 vtk.new_window = function(title)
 	local frame = new_frame()
 
-	return frame,
-		ventanos.new(
-			title,
-			frame.redraw_handler,
-			frame.touch_handler,
-			frame.drop_handler,
-			frame.drag_handler,
-			frame.scroll_handler
-		)
+	local window = ventanos.new(title, function()
+		frame:redraw_handler()
+	end, function(...)
+		frame:touch_handler(...)
+	end, function(...)
+		frame:drop_handler(...)
+	end, function(...)
+		frame:drag_handler(...)
+	end, function(...)
+		frame:scroll_handler(...)
+	end)
+
+	function frame.set(...)
+		ventanos.set(window, ...)
+	end
+
+	function frame.fill(...)
+		ventanos.fill(window, ...)
+	end
+
+	function frame.copy(...)
+		ventanos.copy(window, ...)
+	end
+
+	return frame, window
 end
 
 return vtk

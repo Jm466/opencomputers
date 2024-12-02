@@ -10,7 +10,7 @@ local config = {
 	foreground = 0xFFFFFF,
 }
 
-local default_logo = "/usr/lib/ventanos_data/ventanos_app.ppm"
+local default_logo = "/usr/lib/ventanos/ventanos_app.ppm"
 
 local PATH = {
 	"/usr/ventanos_apps",
@@ -34,7 +34,10 @@ local function get_app_name(app_directory)
 	local file = fs.open(fs.concat(app_directory, "name"))
 	local name = file:read(200) ---@type string
 	file:close()
-	return name
+	if not name then
+		return
+	end
+	return name:sub(1, name:len() - 1)
 end
 
 local programs = {} ---@type {name: string, logo_path: string, init_path: string}[]
@@ -169,37 +172,68 @@ local function drop_handler(handle, x, y)
 
 	handle:fill(1, 1)
 
-	local wm = require("ventanos_data/window_manager")
+	local wm = require("ventanos/window_manager")
 
 	wm.call_userspace(handle.id, function()
 		handle:setTitle(app.name)
 
-		for i, v in pairs(handle.window.environment) do
-			_ENV[i] = v
+		_ENV.kill = function()
+			return handle:kill()
 		end
+		_ENV.setTitle = function(...)
+			return handle:setTitle(...)
+		end
+		_ENV.setBackground = function(...)
+			return handle:setBackground(...)
+		end
+		_ENV.setForeground = function(...)
+			return handle:setForeground(...)
+		end
+		_ENV.setPaletteColor = function(...)
+			return handle:setPaletteColor(...)
+		end
+		_ENV.print = function(...)
+			return handle:print(...)
+		end
+		_ENV.set = function(...)
+			return handle:set(...)
+		end
+		_ENV.setCursor = function(...)
+			return handle:setCursor(...)
+		end
+		_ENV.copy = function(...)
+			return handle:copy(...)
+		end
+		_ENV.fill = function(...)
+			return handle:fill(...)
+		end
+		_ENV.getViewport = function()
+			return handle:getViewport(handle)
+		end
+		_ENV.WINDOW_HANDLE = handle
 
 		loadfile(app.init_path)() -- This is where the magic happens: The entry point
 
-		if Redraw == nil then
+		if _ENV.Redraw == nil then
 			error("When loading the application, function Redraw was not found in environment")
 		end
 
-		handle.window.redraw_handler = Redraw
-		handle.window.touch_handler = Touch
-		handle.window.drop_handler = Drop
-		handle.window.drag_handler = Drag
-		handle.window.scroll_handler = Scroll
+		handle.window.redraw_handler = _ENV.Redraw
+		handle.window.touch_handler = _ENV.Touch
+		handle.window.drop_handler = _ENV.Drop
+		handle.window.drag_handler = _ENV.Drag
+		handle.window.scroll_handler = _ENV.Scroll
 
-		if Main then
-			Main() -- This is it, the real deal, the actual entry point(if it has one anyway)
+		if _ENV.Main then
+			_ENV.Main() -- This is it, the real deal, the actual entry point(if it has one anyway)
 		end
-	end, "main")
 
-	wm.call_userspace(handle.id, handle.window.redraw_handler, "handler")
+		wm.call_userspace(handle.id, handle.window.redraw_handler, "handler")
+	end, "main")
 end
 return function()
 	local ventanos_api = require("ventanos")
-	local wm = require("ventanos_data/window_manager")
+	local wm = require("ventanos/window_manager")
 	left, _, top = wm.get_toolbar_sizes()
 
 	seek_programs()

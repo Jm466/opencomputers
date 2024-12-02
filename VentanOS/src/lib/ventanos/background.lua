@@ -1,6 +1,6 @@
 local imager = require("imager")
 
-local background_path = "/usr/lib/ventanos_data/backgrounds/"
+local background_path = "/usr/lib/ventanos/backgrounds/"
 
 do
 	local t2_background = "background80x25.ppm" -- 80x25

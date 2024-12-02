@@ -1,6 +1,6 @@
 local gpu = require("component").gpu
 
-local program_menu = require("ventanos_data/program_launcher")
+local program_menu = require("ventanos/program_launcher")
 
 local function draw_taskbar()
 	local max_x, start_y = gpu.getViewport()

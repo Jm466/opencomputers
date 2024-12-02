@@ -1,0 +1,78 @@
+---@meta
+
+-- When in a field says "Read only", that means that the component was not designed in a way that allows this value to be changed.
+-- That means that you should not change it. You can still do it if you need to, but it is not supported by the component.
+-- You can instead read the value and execute it if it is a function
+-- You can always change a value unless it is marked as "Read only"
+
+--- A component is the minimal unit that VTK understand
+--- Components are single threaded, you are not allowed to create threads in any case
+--- A component is responsable for drawing itself and can receive mouse events
+--- Mouse events handlers will only be called if the events falls inside the component(0 < x <= width and 0 < y <= height)
+--- You can use set(), copy() and fill() from _ENV to display the component
+--- The coordinates for those functions are local to the component(i.e. fill(1, 1, component.width, component.height)
+--- will fill all the component space, but not the entire viewport, no matter where the component is being drawn)
+--- The function redraw_handler must draw the component to the width and height specified with the fields width and height
+---@class Component
+---@field width integer Read only. This is the width that the component must use to draw itself
+---@field height integer Read only. This is the height that the component must use to draw itself
+---@field set function Read only. Set method of the component
+---@field fill function Read only. Fill method of the component
+---@field copy function Read only. Copy method of the component
+---@field parent_background integer Read only. The background that the component must use if it does not have a background assigned
+---@field pref_width nil|integer|fun(self: Component):integer The width that the component will prefer when being drawn
+---@field pref_height nil|integer|fun(self: Component):integer The height that the component will prefer when being drawn
+---@field min_width integer|fun(self: Component):integer The width field will never be lower than this value
+---@field min_height integer|fun(self: Component):integer The height field will never be lower than this value
+---@field max_width integer|fun(self: Component):integer The width field will never be greater than this value
+---@field max_height integer|fun(self: Component):integer The height field will never be greater than this value
+---@field redraw_handler fun(self: Component)|nil This method will be called when the component needs to be redrawn
+---@field touch_handler fun(self: Component, x: integer, y: integer, button: integer)|nil Function for handling touch events for the component. Coordinates are relative to the component
+---@field drop_handler fun(self: Component, x: integer, y: integer, button): integer|nil Function for handling drop events for the component. Coordinates are relative to the component
+---@field drag_handler fun(self: Component, x: integer, y: integer, button: integer)|nil Function for handling drag events for the component. Coordinates are relative to the component
+---@field scroll_handler fun(self: Component, x: integer, y: integer, direction: -1|1)|nil Function for handling scroll events for the component. Coordinates are relative to the component
+
+--- This component is just a container that holds other components and it is responsable for
+--- setting their width and height; transforming coordinates local to the component to
+--- coordinates local to the container and checking boundries when set(), fill() or copy() gets called;
+--- transforming coordinates local to the container to coordinates local to the component before
+--- calling the mouse event handler of the component and calling the mouse event handler of the
+--- component when a mouse event happens inside the region of the component
+---@class Panel: Component
+---@field layout "box" https://docs.oracle.com/javase/tutorial/uiswing/layout/visual.html
+---@field layout_orientation "horizontal"|"vertical" If horizontal, components will be drawn left to right; if vertical, top to bottom
+---@field scrollable boolean Add a scrollbar instead of craming the components
+---@field background_color integer|nil If nil use the color of the parent
+---@field scroll_bar_color integer
+---@field scroll_bar_button_color integer
+---@field scroll_bar_background_dark_factor integer
+---@field add_component fun(self: Panel, comp: Component) Read only.
+---@field set_component fun(self: Panel, comp: Component, position: integer) Read only.
+---@field remove_component fun(self: Panel, comp: Component): boolean Read only.
+---@field components fun(self: Panel): (fun(): Component) Read only. Iterator of the components of the panel
+---@field private components_array table
+
+--- This class makes it easy to create a component that tell other components that it has received a touch or drop event
+--- The following functions are already defined
+--- You just have to provide the logic for when the component gets pressed or released and call press or release respectively
+---@class ClickableComponent: Component
+---@field add_click_listener fun(self: ClickableComponent, func:function) Read only. Adds a function to be called when click gets called
+---@field remove_click_listener fun(self: ClickableComponent, func:function):boolean Read only. Returs true if it could remove the function
+---@field protected click fun(self: ClickableComponent) Read only. Iterates over all registered click listeners and calls each function
+---@field private click_listeners table
+
+---@class Button: ClickableComponent
+---@field text string Text to display inside the button
+---@field background_color integer
+---@field background_color_edge integer
+---@field pressed_dark_factor integer When the button gets pressed the background color will be (background_color - pressed_dark_factor)
+
+--- Convinient component to create gaps, does nothing
+---@class Spacer: Component
+
+--- Component to draw text in an area
+---@class TextArea: Component
+---@field set_text fun(self: TextArea, text: string) Read only.
+---@field append_text fun(self: TextArea, text: string) Read only.
+---@field foreground_color integer
+---@field background_color integer

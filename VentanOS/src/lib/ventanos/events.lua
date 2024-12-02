@@ -2,7 +2,7 @@ local event = require("event")
 local gpu = require("component").gpu
 local thread = require("thread")
 
-local wm = require("ventanos_data/window_manager")
+local wm = require("ventanos/window_manager")
 
 local drag_min_time_ms = 1
 

@@ -93,35 +93,9 @@ local function bitblt_regions(buff_dest, x_dest, y_dest, x_source, y_source, reg
 	error("bitblt_regions unimplemented")
 end
 
----@param message string Error message to print
----@param func function|nil Function that caused the error
-local function stack_trace(message, func)
-	local call_id = 2
-	local info
-
-	local gpu = require("component").gpu
-
-	gpu.setBackground(16711680)
-	gpu.setForeground(16777215)
-
-	if func then
-		info = debug.getinfo(func)
-		print(tostring(info.short_src) .. ":" .. tostring(info.linedefined))
-	end
-
-	info = debug.getinfo(call_id)
-	while info do
-		print(tostring(info.short_src) .. ":" .. (info.name and info.name or tostring(info.linedefined)))
-		call_id = call_id + 1
-		info = debug.getinfo(call_id)
-	end
-	error(message)
-end
-
 return {
 	get_intersection = get_intersection,
 	subtract = subtract,
 	in_rectangle = in_rectangle,
 	bitblt_regions = bitblt_regions,
-	stack_trace = stack_trace,
 }

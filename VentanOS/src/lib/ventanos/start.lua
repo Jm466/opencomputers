@@ -1,6 +1,6 @@
 return function()
-	local events = require("ventanos_data/events")
-	local wm = require("ventanos_data/window_manager")
+	local events = require("ventanos/events")
+	local wm = require("ventanos/window_manager")
 	local term = require("term")
 
 	term.setCursor(1, 1)

@@ -2,11 +2,7 @@ local vtk = require("VTK/core")
 
 local vtk_text_area = {}
 
----@class TextArea: Component
----@field set_text fun(string)
----@field append_text fun(string)
----@field foreground_color integer
----@field background_color integer
+---@return TextArea
 vtk_text_area.new_text_area = function()
 	local text_area = vtk.new_component() ---@class TextArea
 

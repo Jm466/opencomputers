@@ -1,17 +1,58 @@
 local gpu = require("component").gpu
 local thread = require("thread")
 
-local wm = require("ventanos_data/window_manager")
-local mutex = require("ventanos_data/mutex")
+local wm = require("ventanos/window_manager")
+local mutex = require("ventanos/mutex")
+local util = require("ventanos/util")
 
 ---@class WindowHandle
 ---@field package id integer Window id
 ---@field package window Window
 
+---@param args {string: table<any, table<string>>}
+local function check_args(args)
+	local err = false
+	local case, arg_type, types_list
+	for name, list in pairs(args) do
+		arg_type = type(list[1])
+		err = true
+		case = name
+		types_list = list[2]
+		for _, allowed_type in pairs(types_list) do
+			if arg_type == allowed_type then
+				err = false
+				break
+			end
+		end
+		if err then
+			break
+		end
+	end
+	if not err then
+		return
+	end
+
+	local allowed_types = ""
+	for _, type in pairs(types_list) do
+		allowed_types = allowed_types .. type .. "|"
+	end
+	allowed_types = allowed_types:sub(1, allowed_types:len() - 1)
+	local error_msg = "Function called with wrong types\n"
+		.. "The parameter "
+		.. case
+		.. " had the type "
+		.. arg_type
+		.. " but its allowed types were "
+		.. allowed_types
+
+	error(error_msg)
+end
+
 --- Changes the title of the window
 ---@param handle WindowHandle
 ---@param new_title string New title
 local function setTitle(handle, new_title)
+	check_args({ new_title = { new_title, { "string" } } })
 	wm.update_title(handle.id, new_title)
 end
 
@@ -26,6 +67,7 @@ end
 ---@param color number
 ---@param isPaletteIndex boolean|nil
 local function setBackground(handle, color, isPaletteIndex)
+	check_args({ color = { color, { "number" } }, isPaletteIndex = { isPaletteIndex, { "boolean", "nil" } } })
 	if isPaletteIndex then
 		handle.window.background_color = handle.window.palette[color]
 	else
@@ -38,6 +80,7 @@ end
 ---@param color number
 ---@param isPaletteIndex boolean|nil
 local function setForeground(handle, color, isPaletteIndex)
+	check_args({ color = { color, { "number" } }, isPaletteIndex = { isPaletteIndex, { "boolean", "nil" } } })
 	if isPaletteIndex then
 		handle.window.foreground_color = handle.window.palette[color]
 	else
@@ -50,6 +93,7 @@ end
 ---@param index number
 ---@param value number
 local function setPaletteColor(handle, index, value)
+	check_args({ index = { index, { "number" } }, value = { value, { "number" } } })
 	handle.window.palette[index] = value
 end
 
@@ -70,6 +114,12 @@ end
 ---@return boolean success Says if the operation has been completed. The operation can fail if another window is on top of the current one
 ---@return string reason If fails, contains the reason
 local function set(handle, x, y, value, vertical)
+	check_args({
+		x = { x, { "number" } },
+		y = { y, { "number" } },
+		value = { value, { "string" } },
+		vertical = { vertical, { "boolean", "nil" } },
+	})
 	return wm.window_set(handle.id, x, y, value, vertical)
 end
 
@@ -78,6 +128,7 @@ end
 ---@param x integer
 ---@param y integer
 local function setCursor(handle, x, y)
+	check_args({ x = { x, { "number" } }, y = { y, { "number" } } })
 	if x > 1 or y > 1 or x > handle.window.viewport_width or y > handle.window.viewport_height then
 		return false
 	end
@@ -96,6 +147,14 @@ end
 ---@return boolean success Says if the operation has been completed. The operation can fail if another window is on top of the current one
 ---@return string reason If fails, contains the reason
 local function copy(handle, x, y, width, height, tx, ty)
+	check_args({
+		x = { x, { "number" } },
+		y = { y, { "number" } },
+		width = { width, { "number" } },
+		height = { height, { "number" } },
+		tx = { tx, { "number" } },
+		ty = { ty, { "number" } },
+	})
 	return wm.window_copy(handle.id, x, y, width, height, tx, ty)
 end
 
@@ -109,6 +168,13 @@ end
 ---@return boolean
 ---@return string reason If fails, contains the reason
 local function fill(handle, x, y, width, height, char)
+	check_args({
+		x = { x, { "number", "nil" } },
+		y = { y, { "number", "nil" } },
+		width = { width, { "number", "nil" } },
+		height = { height, { "number", "nil" } },
+		char = { char, { "string", "nil" } },
+	})
 	return wm.window_fill(
 		handle.id,
 		x and x or 1,
@@ -136,6 +202,14 @@ end
 ---@param scroll_handler fun(w: WindowHandle, x: integer, y: integer, direction: -1|1)|nil Handler for window scroll event.
 ---@return WindowHandle handle Handle to the new window
 local function new(title, redraw_handler, touch_handler, drop_handler, drag_handler, scroll_handler)
+	check_args({
+		title = { title, { "string" } },
+		redraw_handler = { redraw_handler, { "function" } },
+		touch_handler = { touch_handler, { "function", "nil" } },
+		drop_handler = { drop_handler, { "function", "nil" } },
+		drag_handler = { drag_handler, { "function", "nil" } },
+		scroll_handler = { scroll_handler, { "function", "nil" } },
+	})
 	local max_x, max_y = gpu.getResolution()
 	local top, bottom, left, right = wm.get_toolbar_sizes()
 
@@ -186,45 +260,6 @@ local function new(title, redraw_handler, touch_handler, drop_handler, drag_hand
 
 	window_handle.window = w
 	window_handle.id = wm.insert_window(w)
-
-	w.environment = {}
-	for i, v in pairs(_G) do
-		w.environment[i] = v
-	end
-
-	w.environment.kill = function()
-		return kill(window_handle)
-	end
-	w.environment.setTitle = function(new_title)
-		return setTitle(window_handle, new_title)
-	end
-	w.environment.setBackground = function(color, isPaletteIndex)
-		return setBackground(window_handle, color, isPaletteIndex)
-	end
-	w.environment.setForeground = function(color, isPaletteIndex)
-		return setForeground(window_handle, color, isPaletteIndex)
-	end
-	w.environment.setPaletteColor = function(index, value)
-		return setPaletteColor(window_handle, index, value)
-	end
-	w.environment.print = function(...)
-		return print(window_handle, ...)
-	end
-	w.environment.set = function(x, y, value, vertical)
-		return set(window_handle, x, y, value, vertical)
-	end
-	w.environment.setCursor = function(x, y)
-		return setCursor(window_handle, x, y)
-	end
-	w.environment.copy = function(x, y, width, height, tx, ty)
-		return copy(window_handle, x, y, width, height, tx, ty)
-	end
-	w.environment.fill = function(x, y, width, height, char)
-		return fill(window_handle, x, y, width, height, char)
-	end
-	w.environment.getViewport = function()
-		return getViewport(window_handle)
-	end
 
 	return window_handle
 end

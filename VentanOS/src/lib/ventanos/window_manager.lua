@@ -1,9 +1,9 @@
 local gpu = require("component").gpu
 local thread = require("thread")
 
-local util = require("ventanos_data/util")
-local taskbar = require("ventanos_data/taskbar")
-local background = require("ventanos_data/background")
+local util = require("ventanos/util")
+local taskbar = require("ventanos/taskbar")
+local background = require("ventanos/background")
 
 local viewport_max_x, viewport_max_y = gpu.getViewport()
 local max_memory = tostring(math.floor(gpu.totalMemory()))
@@ -39,7 +39,6 @@ local options = {
 
 ---@class Window
 ---@field title string
----@field environment table
 ---@field redraw_handler function
 ---@field touch_handler function|nil
 ---@field drop_handler function|nil
@@ -532,29 +531,29 @@ function call_userspace(id, user_function, type, ...)
 	thread.create(function(...)
 		local w = id_to_window(id)
 
-		local status, error = pcall(user_function, ...)
+		local c = coroutine.create(user_function)
+		local status, error = coroutine.resume(c, ...)
 
 		if status then
 			return error
 		end
 
-		local info = debug.getinfo(user_function)
+		local trace = debug.traceback(c, error)
 
 		if w.geometry_lock:is_locked() then
 			w.geometry_lock:release()
 		end
-
-		update_title(id, "Kaboom!")
 
 		w.touch_handler = nil
 		w.drop_handler = nil
 		w.drag_handler = nil
 		w.scroll_handler = nil
 		w.redraw_handler = function()
-			gpu.setBackground(skin.user_crash_background)
-			gpu.setForeground(skin.user_crash)
+			w.background_color = skin.user_crash_background
+			w.foreground_color = skin.user_crash
 			w.cursor_x = 1
 			w.cursor_y = 1
+
 			window_fill(id, 1, 1, w.viewport_width, w.viewport_height, " ")
 			if type == "main" then
 				window_print(id, "The application just crashed!")
@@ -563,17 +562,11 @@ function call_userspace(id, user_function, type, ...)
 			elseif type == "internal" then
 				window_print(id, "VentanOS error!")
 			end
-			window_print(id, error)
-			window_print(
-				id,
-				"The function was defined at: " .. tostring(info.short_src) .. ":" .. tostring(info.linedefined)
-			)
-			window_print(id, "Now follows all the information that could be gathered")
-			for i, v in pairs(info) do
-				window_print(id, tostring(i) .. "    " .. tostring(v))
-			end
+
+			window_print(id, trace)
 		end
 
+		update_title(id, "Kaboom!")
 		w.redraw_handler()
 	end, ...)
 end
@@ -614,7 +607,7 @@ end
 ---@param id integer
 ---@param regions Rectangle[]
 local function try_redraw(id, regions)
-	if true then
+	if true then -- TODO:
 		return
 	end
 	local w = id_to_window(id)

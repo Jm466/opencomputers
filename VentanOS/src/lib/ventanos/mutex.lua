@@ -1,5 +1,5 @@
 local thread = require("thread")
-local util = require("ventanos_data/util")
+local util = require("ventanos/util")
 
 ---@class Mutex
 ---@field package locked_by thread
