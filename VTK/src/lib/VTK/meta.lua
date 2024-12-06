@@ -31,6 +31,9 @@
 ---@field drop_handler fun(self: Component, x: integer, y: integer, button): integer|nil Function for handling drop events for the component. Coordinates are relative to the component
 ---@field drag_handler fun(self: Component, x: integer, y: integer, button: integer)|nil Function for handling drag events for the component. Coordinates are relative to the component
 ---@field scroll_handler fun(self: Component, x: integer, y: integer, direction: -1|1)|nil Function for handling scroll events for the component. Coordinates are relative to the component
+---@field new fun(self: Component): Component Read only. Method for creating an instance(object) of a component
+---@field init (fun(self: Component, comp: Component): Component)? You may define this method. It will be called after new() as a way to initialice atributes for the class(it acts as a constructor)
+---@field parent Component Read only
 
 --- This component is just a container that holds other components and it is responsable for
 --- setting their width and height; transforming coordinates local to the component to

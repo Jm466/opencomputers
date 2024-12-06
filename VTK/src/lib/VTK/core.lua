@@ -12,8 +12,22 @@ local Component = {
 	max_height = math.huge,
 }
 
-function Component:new(prototype)
-	return setmetatable(prototype and prototype or {}, { __index = self })
+---@param class Component
+---@param comp Component
+local function initialize_component(class, comp)
+	if class.parent and class ~= class.parent then
+		initialize_component(class.parent, comp)
+	end
+	if class.init then
+		class:init(comp)
+	end
+end
+
+function Component:new()
+	local new_component = setmetatable({}, { __index = self })
+	new_component.parent = self
+	initialize_component(self, new_component)
+	return new_component
 end
 
 ---@return boolean success
@@ -30,13 +44,13 @@ local function array_remove(array, value)
 end
 
 ---@class ClickableComponent
----@field new fun(c:ClickableComponent, o): ClickableComponent
 local Clickable = Component:new()
 
+function Clickable:init(clickable)
+	clickable.click_listeners = {}
+end
+
 function Clickable:add_click_listener(func)
-	if not self.click_listeners then
-		self.click_listeners = {}
-	end
 	self.click_listeners[#self.click_listeners + 1] = func
 end
 
@@ -222,26 +236,23 @@ local function get(component, field)
 end
 
 ---@class Panel
----@field new fun(p:Panel, o): Panel
-local Panel = Component:new({
-	layout = "box",
-	layout_orientation = "horizontal",
-	scrollable = false,
-	scroll_state = 0,
-	length_sum = 0,
-	scroll_max = 0,
+local Panel = Component:new()
 
-	scroll_bar_color = 0x457AA2,
-	scroll_bar_button_color = 0xffffff,
-	scroll_bar_background_dark_factor = 0x1e1e1e,
-
-	next_free = 0,
-})
+function Panel:init(panel)
+	panel.layout = "box"
+	panel.layout_orientation = "horizontal"
+	panel.scrollable = false
+	panel.scroll_state = 0
+	panel.length_sum = 0
+	panel.scroll_max = 0
+	panel.scroll_bar_color = 0x457AA2
+	panel.scroll_bar_button_color = 0xffffff
+	panel.scroll_bar_background_dark_factor = 0x1e1e1e
+	panel.next_free = 0
+	panel.components_array = {}
+end
 
 function Panel:add_component(comp)
-	if not self.components_array then
-		self.components_array = {}
-	end
 	self.components_array[#self.components_array + 1] = comp
 	sandbox(self, comp)
 	self.context_changed = true
@@ -320,7 +331,7 @@ function Panel:calculate_geometry()
 	if self.scrollable then
 		local i, offset = 0, -self.scroll_state
 
-		if self.layout_orientation == "horizontal" then
+		if self.layout_orientation == "horizontal" then -- Horizontal with scroll
 			local components_settings = self:get_components_settings({ "pref_width" }, { "max_height" })
 			for component in self:components() do
 				i = i + 1
@@ -333,7 +344,7 @@ function Panel:calculate_geometry()
 			end
 			self.length_sum = components_settings.pref_width.value
 			self.scroll_max = self.length_sum - self.width
-		else
+		else -- Vertical with scroll
 			local components_settings = self:get_components_settings({ "max_width" }, { "pref_height" })
 			for component in self:components() do
 				i = i + 1
@@ -350,7 +361,7 @@ function Panel:calculate_geometry()
 	else -- Without scroll
 		local i = 0
 
-		if self.layout_orientation == "horizontal" then
+		if self.layout_orientation == "horizontal" then -- Horizontal without scroll
 			local components_settings = self:get_components_settings({ "max_width", "min_width" }, { "max_height" })
 			local pos = 1
 			local space_asked = self.width
@@ -377,7 +388,7 @@ function Panel:calculate_geometry()
 
 				pos = pos + component.width
 			end
-		else
+		else -- Vertical without scroll
 			local components_settings = self:get_components_settings({ "max_width" }, { "max_height", "min_height" })
 			local pos = 1
 			local space_asked = self.height
@@ -636,13 +647,13 @@ function Panel:redraw_handler()
 end
 
 return {
-	new_component = function(o) ---@return Component
-		return Component:new(o)
+	new_component = function() ---@return Component
+		return Component:new()
 	end,
-	new_clickable = function(o) ---@return ClickableComponent
-		return Clickable:new(o)
+	new_clickable = function() ---@return ClickableComponent
+		return Clickable:new() ---@type ClickableComponent
 	end,
-	new_panel = function(o) ---@return Panel
-		return Panel:new(o)
+	new_panel = function() ---@return Panel
+		return Panel:new() ---@type Panel
 	end,
 }

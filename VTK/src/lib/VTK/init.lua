@@ -6,13 +6,11 @@ local vtk = {}
 ---@class Frame: Panel
 ---@field background_color integer?
 ---@field new fun(f: Frame, o: table?): Frame
-local Frame = core.new_panel({
-	parent_background = 0x797979,
-})
+local Frame = core.new_panel()
 
 Frame.true_redraw = Frame.redraw_handler
 function Frame:redraw_handler()
-	_ENV.setBackground(self.background_color and self.background_color or self.parent_background)
+	_ENV.setBackground(self.background_color)
 	self.fill()
 
 	self.width, self.height = _ENV.getViewport()
@@ -20,8 +18,13 @@ function Frame:redraw_handler()
 	self:true_redraw()
 end
 
-local function new_frame(o)
-	return Frame:new(o)
+local function new_frame()
+	return Frame:new()
+end
+
+---@param frame Frame
+function Frame:init(frame)
+	frame.background_color = 0x797979
 end
 
 --- Creates a frame for the window. Cannot be called more than once and must be called outside of the main function
@@ -51,18 +54,23 @@ vtk.init = function()
 
 	_ENV.Redraw = function()
 		frame:redraw_handler()
+		_ENV.setBackground(frame.background_color)
 	end
 	_ENV.Touch = function(...)
 		frame:touch_handler(...)
+		_ENV.setBackground(frame.background_color)
 	end
 	_ENV.Drop = function(...)
 		frame:drop_handler(...)
+		_ENV.setBackground(frame.background_color)
 	end
 	_ENV.Drag = function(...)
 		frame:drag_handler(...)
+		_ENV.setBackground(frame.background_color)
 	end
 	_ENV.Scroll = function(...)
 		frame:scroll_handler(...)
+		_ENV.setBackground(frame.background_color)
 	end
 
 	return frame
@@ -77,14 +85,19 @@ vtk.new_window = function(title)
 
 	local window = ventanos.new(title, function()
 		frame:redraw_handler()
+		_ENV.setBackground(frame.background_color)
 	end, function(...)
 		frame:touch_handler(...)
+		_ENV.setBackground(frame.background_color)
 	end, function(...)
 		frame:drop_handler(...)
+		_ENV.setBackground(frame.background_color)
 	end, function(...)
 		frame:drag_handler(...)
+		_ENV.setBackground(frame.background_color)
 	end, function(...)
 		frame:scroll_handler(...)
+		_ENV.setBackground(frame.background_color)
 	end)
 
 	function frame.set(...)

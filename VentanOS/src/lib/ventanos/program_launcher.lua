@@ -40,7 +40,7 @@ local function get_app_name(app_directory)
 	return name:sub(1, name:len() - 1)
 end
 
-local programs = {} ---@type {name: string, logo_path: string, init_path: string}[]
+local programs = {} ---@type {name: string, logo_path: string, init_path: string, workdir: string}[]
 local function seek_programs()
 	local function add_programs_directories(path)
 		for file in fs.list(path) do
@@ -72,6 +72,7 @@ local function seek_programs()
 						name = name,
 						logo_path = logo,
 						init_path = fs.concat(cannonical_file, "init.lua"),
+						workdir = cannonical_file,
 					}
 				end
 			end
@@ -160,6 +161,7 @@ local function touch_handler(handle, x, y)
 	selected_last_touch = get_app_selected(handle, x, y)
 end
 
+---@param handle WindowHandle
 local function drop_handler(handle, x, y)
 	local app = get_app_selected(handle, x, y)
 
@@ -169,47 +171,22 @@ local function drop_handler(handle, x, y)
 
 	handle.window.touch_handler = nil
 	handle.window.drop_handler = nil
+	handle.window.workdir = app.workdir
 
-	handle:fill(1, 1)
+	handle:fill()
 
 	local wm = require("ventanos/window_manager")
 
 	wm.call_userspace(handle.id, function()
 		handle:setTitle(app.name)
 
-		_ENV.kill = function()
-			return handle:kill()
+		-- We set the ventanos api functions for the environment, they are just a wrapper for handle:<func_name>
+		for func in pairs(getmetatable(handle).__index) do
+			_ENV[func] = function(...)
+				return handle[func](handle, ...)
+			end
 		end
-		_ENV.setTitle = function(...)
-			return handle:setTitle(...)
-		end
-		_ENV.setBackground = function(...)
-			return handle:setBackground(...)
-		end
-		_ENV.setForeground = function(...)
-			return handle:setForeground(...)
-		end
-		_ENV.setPaletteColor = function(...)
-			return handle:setPaletteColor(...)
-		end
-		_ENV.print = function(...)
-			return handle:print(...)
-		end
-		_ENV.set = function(...)
-			return handle:set(...)
-		end
-		_ENV.setCursor = function(...)
-			return handle:setCursor(...)
-		end
-		_ENV.copy = function(...)
-			return handle:copy(...)
-		end
-		_ENV.fill = function(...)
-			return handle:fill(...)
-		end
-		_ENV.getViewport = function()
-			return handle:getViewport(handle)
-		end
+
 		_ENV.WINDOW_HANDLE = handle
 
 		loadfile(app.init_path)() -- This is where the magic happens: The entry point

@@ -1,13 +1,25 @@
 local gpu = require("component").gpu
 local thread = require("thread")
+local shell = require("shell")
 
 local wm = require("ventanos/window_manager")
 local mutex = require("ventanos/mutex")
-local util = require("ventanos/util")
 
 ---@class WindowHandle
----@field package id integer Window id
----@field package window Window
+---@field id integer Window id
+---@field window Window
+---@field setTitle fun(handle: WindowHandle, new_title: string)
+---@field kill fun(handle: WindowHandle)
+---@field setBackground fun(handle: WindowHandle, color: number, isPaletteIndex: boolean?)
+---@field setForeground fun(handle: WindowHandle, color: number, isPaletteIndex: boolean?)
+---@field setPaletteColor fun(handle: WindowHandle, index: number, value: number)
+---@field print fun(handler: WindowHandle, ...): boolean, string
+---@field set fun(handle: WindowHandle, x: number, y: number, value: string, vertical: boolean?): boolean, string
+---@field setCursor fun(handle: WindowHandle, x: number, y: number):boolean
+---@field copy fun(handle: WindowHandle, x: number, y: number, width: number, height:number, tx:number, ty:number): boolean, string
+---@field fill fun(handle: WindowHandle, x:number?, y:number?, width:number?, height:number?, char:string?): boolean, string
+---@field getViewport fun(handle:WindowHandle):integer, integer
+local WindowHandle = {}
 
 ---@param args {string: table<any, table<string>>}
 local function check_args(args)
@@ -49,104 +61,96 @@ local function check_args(args)
 end
 
 --- Changes the title of the window
----@param handle WindowHandle
 ---@param new_title string New title
-local function setTitle(handle, new_title)
+function WindowHandle:setTitle(new_title)
 	check_args({ new_title = { new_title, { "string" } } })
-	wm.update_title(handle.id, new_title)
+	wm.update_title(self.id, new_title)
 end
 
 --- Kills the window
----@param handle WindowHandle
-local function kill(handle)
-	wm.remove(handle.id)
+function WindowHandle:kill()
+	wm.remove(self.id)
 end
 
 --- Sets the background color for this window like gpu.setBackground() - https://ocdoc.cil.li/component:gpu
----@param handle WindowHandle
 ---@param color number
 ---@param isPaletteIndex boolean|nil
-local function setBackground(handle, color, isPaletteIndex)
+function WindowHandle:setBackground(color, isPaletteIndex)
 	check_args({ color = { color, { "number" } }, isPaletteIndex = { isPaletteIndex, { "boolean", "nil" } } })
 	if isPaletteIndex then
-		handle.window.background_color = handle.window.palette[color]
+		self.window.background_color = self.window.palette[color]
 	else
-		handle.window.background_color = color
+		self.window.background_color = color
 	end
 end
 
 --- Sets the foreground color for this window like gpu.setForeground() - https://ocdoc.cil.li/component:gpu
----@param handle WindowHandle
 ---@param color number
 ---@param isPaletteIndex boolean|nil
-local function setForeground(handle, color, isPaletteIndex)
+function WindowHandle:setForeground(color, isPaletteIndex)
 	check_args({ color = { color, { "number" } }, isPaletteIndex = { isPaletteIndex, { "boolean", "nil" } } })
 	if isPaletteIndex then
-		handle.window.foreground_color = handle.window.palette[color]
+		self.window.foreground_color = self.window.palette[color]
 	else
-		handle.window.foreground_color = color
+		self.window.foreground_color = color
 	end
 end
 
 --- Sets a color in the palette at the specified index - https://ocdoc.cil.li/component:gpu
----@param handle WindowHandle
 ---@param index number
 ---@param value number
-local function setPaletteColor(handle, index, value)
+function WindowHandle:setPaletteColor(index, value)
 	check_args({ index = { index, { "number" } }, value = { value, { "number" } } })
-	handle.window.palette[index] = value
+	self.window.palette[index] = value
 end
 
 --- Prints the message
----@param handler WindowHandle
 ---@return boolean success Says if the operation has been completed. The operation can fail if another window is on top of the current one
 ---@return string reason If fails, contains the reason
-local function print(handler, ...)
-	return wm.window_print(handler.id, ...)
+function WindowHandle:print(...)
+	return wm.window_print(self.id, ...)
 end
 
 --- Writes a screen to the viewport starting at the specified viewport coordinates - https://ocdoc.cil.li/component:gpu
----@param handle WindowHandle
----@param x integer X coordinate of the viewport
----@param y integer Y coordinate of the viewport
+---@param x number X coordinate of the viewport
+---@param y number Y coordinate of the viewport
 ---@param value string String to write
 ---@param vertical boolean|nil If true, print the text vertically
 ---@return boolean success Says if the operation has been completed. The operation can fail if another window is on top of the current one
 ---@return string reason If fails, contains the reason
-local function set(handle, x, y, value, vertical)
+function WindowHandle:set(x, y, value, vertical)
 	check_args({
 		x = { x, { "number" } },
 		y = { y, { "number" } },
 		value = { value, { "string" } },
 		vertical = { vertical, { "boolean", "nil" } },
 	})
-	return wm.window_set(handle.id, x, y, value, vertical)
+	return wm.window_set(self.id, x, y, value, vertical)
 end
 
 --- Sets the cursor position to the specified coordinates - https://ocdoc.cil.li/api:term
----@param handle WindowHandle
----@param x integer
----@param y integer
-local function setCursor(handle, x, y)
+---@param x number
+---@param y number
+function WindowHandle:setCursor(x, y)
 	check_args({ x = { x, { "number" } }, y = { y, { "number" } } })
-	if x > 1 or y > 1 or x > handle.window.viewport_width or y > handle.window.viewport_height then
+	if x > 1 or y > 1 or x > self.window.viewport_width or y > self.window.viewport_height then
 		return false
 	end
-	handle.window.cursor_x = x
-	handle.window.cursor_y = y
+	self.window.cursor_x = x
+	self.window.cursor_y = y
+	return true
 end
 
 --- Copy a portion of the viewport to another location - https://ocdoc.cil.li/component:gpu
----@param handle WindowHandle
----@param x integer X coordinate of the source rectangle
----@param y integer Y coordinate of the source rectangle
----@param width integer Width of the source rectangle
----@param height integer Height of the source rectangle
----@param tx integer X coordinate of the destination
----@param ty integer Y coordinate of the destination
+---@param x number X coordinate of the source rectangle
+---@param y number Y coordinate of the source rectangle
+---@param width number Width of the source rectangle
+---@param height number Height of the source rectangle
+---@param tx number X coordinate of the destination
+---@param ty number Y coordinate of the destination
 ---@return boolean success Says if the operation has been completed. The operation can fail if another window is on top of the current one
 ---@return string reason If fails, contains the reason
-local function copy(handle, x, y, width, height, tx, ty)
+function WindowHandle:copy(x, y, width, height, tx, ty)
 	check_args({
 		x = { x, { "number" } },
 		y = { y, { "number" } },
@@ -155,11 +159,10 @@ local function copy(handle, x, y, width, height, tx, ty)
 		tx = { tx, { "number" } },
 		ty = { ty, { "number" } },
 	})
-	return wm.window_copy(handle.id, x, y, width, height, tx, ty)
+	return wm.window_copy(self.id, x, y, width, height, tx, ty)
 end
 
 --- Draw a rectangle - https://ocdoc.cil.li/component:gpu
----@param handle WindowHandle
 ---@param x integer|nil X coordinate in the viewport of the rectangle to draw
 ---@param y integer|nil Y coordinate in the viewport of the rectangle to draw
 ---@param width integer|nil Width of the rectangle to draw, if nil, the width of the window
@@ -167,7 +170,7 @@ end
 ---@param char string|nil The character to draw. Must be of length one. If nil, " "
 ---@return boolean
 ---@return string reason If fails, contains the reason
-local function fill(handle, x, y, width, height, char)
+function WindowHandle:fill(x, y, width, height, char)
 	check_args({
 		x = { x, { "number", "nil" } },
 		y = { y, { "number", "nil" } },
@@ -176,21 +179,20 @@ local function fill(handle, x, y, width, height, char)
 		char = { char, { "string", "nil" } },
 	})
 	return wm.window_fill(
-		handle.id,
+		self.id,
 		x and x or 1,
 		y and y or 1,
-		width and width or handle.window.viewport_width,
-		height and height or handle.window.viewport_height,
+		width and width or self.window.viewport_width,
+		height and height or self.window.viewport_height,
 		char and char or " "
 	)
 end
 
 --- Gets the current viewport resolution
----@param handle WindowHandle
 ---@return integer x
 ---@return integer y
-local function getViewport(handle)
-	return handle.window.viewport_width, handle.window.viewport_height
+function WindowHandle:getViewport()
+	return self.window.viewport_width, self.window.viewport_height
 end
 
 --- Create a new window
@@ -241,40 +243,11 @@ local function new(title, redraw_handler, touch_handler, drop_handler, drag_hand
 	w.cursor_x = 1
 	w.cursor_y = 1
 	w.pending_redraws = {}
+	w.workdir = shell.getWorkingDirectory()
 
-	local window_handle = setmetatable({}, {
-		__index = {
-			kill = kill,
-			setTitle = setTitle,
-			setBackground = setBackground,
-			setForeground = setForeground,
-			setPaletteColor = setPaletteColor,
-			print = print,
-			set = set,
-			setCursor = setCursor,
-			copy = copy,
-			fill = fill,
-			getViewport = getViewport,
-		},
-	})
-
-	window_handle.window = w
-	window_handle.id = wm.insert_window(w)
-
-	return window_handle
+	return setmetatable({ id = wm.insert_window(w), window = w }, { __index = WindowHandle })
 end
 
 return {
 	new = new,
-	kill = kill,
-	setTitle = setTitle,
-	setBackground = setBackground,
-	setForeground = setForeground,
-	setPaletteColor = setPaletteColor,
-	print = print,
-	set = set,
-	copy = copy,
-	fill = fill,
-	getViewport = getViewport,
-	setCursor = setCursor,
 }

@@ -1,5 +1,6 @@
 local gpu = require("component").gpu
 local thread = require("thread")
+local shell = require("shell")
 
 local util = require("ventanos/util")
 local taskbar = require("ventanos/taskbar")
@@ -8,7 +9,7 @@ local background = require("ventanos/background")
 local viewport_max_x, viewport_max_y = gpu.getViewport()
 local max_memory = tostring(math.floor(gpu.totalMemory()))
 
-local toolbar_sizes = { top = 1, bottom = 0, left = 1, right = 1 }
+local window_border_sizes = { top = 1, bottom = 0, left = 1, right = 1 }
 local skin = {
 	window_border = 283867,
 	cross_button = 16777215,
@@ -63,6 +64,7 @@ local options = {
 ---@field cursor_x integer
 ---@field cursor_y integer
 ---@field pending_redraws Rectangle[]
+---@field workdir string
 
 ---@type Window[]
 local windows = {} -- Unordered list that contains all the windows
@@ -146,8 +148,8 @@ end
 ---@return integer bottom
 ---@return integer left
 ---@return integer right
-local function get_toolbar_sizes()
-	return toolbar_sizes.top, toolbar_sizes.bottom, toolbar_sizes.left, toolbar_sizes.right
+local function get_window_border_sizes()
+	return window_border_sizes.top, window_border_sizes.bottom, window_border_sizes.left, window_border_sizes.right
 end
 
 ---@param id integer
@@ -187,7 +189,7 @@ end
 ---@return string reason
 local function window_copy(id, x, y, width, height, tx, ty)
 	local w = id_to_window(id)
-	local top, _, left = get_toolbar_sizes()
+	local top, _, left = get_window_border_sizes()
 
 	if w.minimized then
 		return false, "minimized"
@@ -246,7 +248,7 @@ end
 ---@return boolean
 ---@return string reason
 local function window_fill(id, x, y, width, height, char)
-	local top, _, left = get_toolbar_sizes()
+	local top, _, left = get_window_border_sizes()
 	local w = id_to_window(id)
 
 	if w.minimized then
@@ -284,7 +286,7 @@ end
 ---@return string reason
 local function window_set(id, x, y, value, vertical)
 	local w = id_to_window(id)
-	local top, _, left = get_toolbar_sizes()
+	local top, _, left = get_window_border_sizes()
 
 	if w.minimized then
 		return false, "minimized"
@@ -333,7 +335,7 @@ end
 ---@return string reason
 local function window_print(id, ...)
 	local w = id_to_window(id)
-	local top, _, left = get_toolbar_sizes()
+	local top, _, left = get_window_border_sizes()
 	local offset_x = w.x + left - 1
 	local offset_y = w.y + top - 1
 	local width = w.viewport_width
@@ -434,7 +436,7 @@ end
 ---@param id integer
 local function draw_title(id)
 	local w = id_to_window(id)
-	local _, _, left = get_toolbar_sizes()
+	local _, _, left = get_window_border_sizes()
 
 	w.geometry_lock:acquire()
 
@@ -531,8 +533,13 @@ function call_userspace(id, user_function, type, ...)
 	thread.create(function(...)
 		local w = id_to_window(id)
 
+		local old_workdir = shell.getWorkingDirectory()
+		shell.setWorkingDirectory(w.workdir)
+
 		local c = coroutine.create(user_function)
 		local status, error = coroutine.resume(c, ...)
+
+		shell.setWorkingDirectory(old_workdir)
 
 		if status then
 			return error
@@ -630,8 +637,8 @@ local function try_redraw(id, regions)
 					id,
 					win.redraw_handler,
 					"handler",
-					win.x + toolbar_sizes.left + inter.x - 1,
-					win.y + toolbar_sizes.top + inter.y - 1,
+					win.x + window_border_sizes.left + inter.x - 1,
+					win.y + window_border_sizes.top + inter.y - 1,
 					inter.width,
 					inter.height
 				)
@@ -891,6 +898,20 @@ local function change_geometry(id, new_x, new_y, new_width, new_height)
 		else --TODO:
 		end
 	else
+		do
+			local old_viewport_in_new_coordinates = {
+				x = new_x,
+				y = new_y,
+				width = w.viewport_width,
+				height = w.viewport_height,
+			}
+			local rects = util.subtract(new_dimensions, old_viewport_in_new_coordinates)
+			for _, rect in pairs(rects) do
+				setColorsOfClient(w)
+				gpu.fill(rect.x, rect.y, rect.width, rect.height, " ")
+			end
+		end
+
 		local rects = util.subtract(old_dimensions, new_dimensions)
 		if w.screen_buffer then
 			for _, rect in pairs(rects) do
@@ -905,6 +926,7 @@ local function change_geometry(id, new_x, new_y, new_width, new_height)
 					rect.y - w.y + 1
 				)
 			end
+			--os.sleep(1)
 			if tmp_buffer then
 				gpu.bitblt(
 					tmp_buffer,
@@ -916,6 +938,7 @@ local function change_geometry(id, new_x, new_y, new_width, new_height)
 					intersection.x - w.x + 1,
 					intersection.y - w.y + 1
 				)
+			else --TODO:
 			end
 			gpu.freeBuffer(w.screen_buffer)
 		else
@@ -928,7 +951,7 @@ local function change_geometry(id, new_x, new_y, new_width, new_height)
 
 	w.screen_buffer = tmp_buffer
 
-	local top, bottom, left, right = get_toolbar_sizes()
+	local top, bottom, left, right = get_window_border_sizes()
 
 	w.x = new_x
 	w.y = new_y
@@ -1037,7 +1060,7 @@ local function mouse_event_handler(event, x, y)
 						change_geometry(id, 1, 1, half_width, half_height)
 						draw_window(id)
 					elseif x >= tile_x + 8 and x <= tile_x + 11 then -- full left
-						change_geometry(id, 1, 1, half_width, viewport_max_y)
+						change_geometry(id, 1, 1, half_width, viewport_max_y - 2)
 						draw_window(id)
 					elseif x >= tile_x + 14 and x <= tile_x + 17 then -- full top
 						change_geometry(id, 1, 1, viewport_max_x, half_height)
@@ -1051,7 +1074,7 @@ local function mouse_event_handler(event, x, y)
 						change_geometry(id, 1, half_height + 1, half_width, half_height)
 						draw_window(id)
 					elseif x >= tile_x + 8 and x <= tile_x + 11 then -- full right
-						change_geometry(id, half_width + 1, 1, half_width, viewport_max_y)
+						change_geometry(id, half_width + 1, 1, half_width, viewport_max_y - 2)
 						draw_window(id)
 					elseif x >= tile_x + 14 and x <= tile_x + 17 then -- full bottom
 						change_geometry(id, 1, half_height + 1, viewport_max_x, half_height)
@@ -1119,7 +1142,7 @@ local function mouse_handler(event, x, y, button, scroll)
 		local id = visible[i]
 		local w = id_to_window(id)
 		if x >= w.x and x < w.x + w.width and y >= w.y and y < w.y + w.height then
-			local top, bottom, left, _ = get_toolbar_sizes()
+			local top, bottom, left, _ = get_window_border_sizes()
 
 			call(id, move_to_top, id)
 
@@ -1209,7 +1232,7 @@ return {
 	update_title = update_title,
 	remove_all = remove_all,
 	remove_all_of_thread = remove_all_of_thread,
-	get_toolbar_sizes = get_toolbar_sizes,
+	get_toolbar_sizes = get_window_border_sizes,
 	draw_title = draw_title,
 	draw_frame = draw_frame,
 	draw_window = draw_window,
