@@ -212,6 +212,9 @@ local function sandbox(panel, component)
 	component.copy = function(...)
 		sandboxed_copy(panel, component, ...)
 	end
+	for func in pairs({ "setBackground", "setForeground", "setPaletteColor" }) do
+		component[func] = panel[func]
+	end
 end
 
 ---@param component Component

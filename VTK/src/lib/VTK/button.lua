@@ -41,12 +41,12 @@ function Button:redraw_handler()
 	local display_text = self.text:len() <= self.width - 1 and self.text or self.text:sub(1, self.width - 2)
 
 	if self.height > 1 then
-		_ENV.setBackground(self.background_color_edge)
+		self.setBackground(self.background_color_edge)
 		self.fill()
 	end
 
 	if self.state == "released" then
-		_ENV.setBackground(self.background_color)
+		self.setBackground(self.background_color)
 		if self.height > 1 then
 			self.fill(1, 1, self.width - 2, self.height - 1)
 		else
@@ -59,7 +59,7 @@ function Button:redraw_handler()
 			display_text
 		)
 	else
-		_ENV.setBackground(self.background_color - self.pressed_dark_factor)
+		self.setBackground(self.background_color - self.pressed_dark_factor)
 		if self.height > 1 then
 			self.fill(3, 2, self.width - 2, self.height - 1)
 		else

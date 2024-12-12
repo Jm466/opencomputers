@@ -9,7 +9,7 @@
 --- Components are single threaded, you are not allowed to create threads in any case
 --- A component is responsable for drawing itself and can receive mouse events
 --- Mouse events handlers will only be called if the events falls inside the component(0 < x <= width and 0 < y <= height)
---- You can use set(), copy() and fill() from _ENV to display the component
+--- You can use set(), copy() and fill() from the component to display the component
 --- The coordinates for those functions are local to the component(i.e. fill(1, 1, component.width, component.height)
 --- will fill all the component space, but not the entire viewport, no matter where the component is being drawn)
 --- The function redraw_handler must draw the component to the width and height specified with the fields width and height
@@ -19,6 +19,9 @@
 ---@field set function Read only. Set method of the component
 ---@field fill function Read only. Fill method of the component
 ---@field copy function Read only. Copy method of the component
+---@field setBackground function Read only. SetBackground method for the component(sets the background color for the whole window)
+---@field setForeground function Read only. SetForeground method for the component(sets the foreground color for the whole window)
+---@field setPaletteColor function Read only. SetPaletteColor method for the component(sets the palette color for the whole window)
 ---@field parent_background integer Read only. The background that the component must use if it does not have a background assigned
 ---@field pref_width nil|integer|fun(self: Component):integer The width that the component will prefer when being drawn
 ---@field pref_height nil|integer|fun(self: Component):integer The height that the component will prefer when being drawn

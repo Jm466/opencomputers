@@ -1,6 +1,7 @@
 local ventanos = require("ventanos")
 local core = require("VTK/core")
 
+local api_functions = { "set", "fill", "copy", "setBackground", "setForeground", "setPaletteColor" }
 local vtk = {}
 
 ---@class Frame: Panel
@@ -38,19 +39,12 @@ vtk.init = function()
 
 	local frame = new_frame()
 
-	frame.set = function(...)
-		_ENV.WINDOW_HANDLE:set(...)
+	for func in pairs(api_functions) do
+		frame[func] = function(...)
+			_ENV.WINDOW_HANDLE[func](_ENV.WINDOW_HANDLE, ...)
+		end
+		_ENV[func] = nil
 	end
-	frame.fill = function(...)
-		_ENV.WINDOW_HANDLE:fill(...)
-	end
-	frame.copy = function(...)
-		_ENV.WINDOW_HANDLE:copy(...)
-	end
-
-	_ENV.set = nil
-	_ENV.fill = nil
-	_ENV.copy = nil
 
 	_ENV.Redraw = function()
 		frame:redraw_handler()
@@ -100,16 +94,10 @@ vtk.new_window = function(title)
 		_ENV.setBackground(frame.background_color)
 	end)
 
-	function frame.set(...)
-		ventanos.set(window, ...)
-	end
-
-	function frame.fill(...)
-		ventanos.fill(window, ...)
-	end
-
-	function frame.copy(...)
-		ventanos.copy(window, ...)
+	for func in pairs(api_functions) do
+		frame[func] = function(...)
+			ventanos[func](window, ...)
+		end
 	end
 
 	return frame, window
