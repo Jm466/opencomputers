@@ -1,1 +1,1 @@
-require("ventanos")()
+require("ventanos/start")()
