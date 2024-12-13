@@ -1,1 +1,1 @@
-require("ventanos_data")()
+require("ventanos")()
