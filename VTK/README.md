@@ -66,8 +66,9 @@ When creating your component see first if there is a more specific component tha
 
 Once you have decided who will be your father, you need to create a table by creating a new instance of the father and
 after that you can override `init` in your new table so that it implements the constructor of your new Component,
-finally you need to return a table with at least the `new` function, that does not have any parameters and returns a new instance
-of your Component:
+finally you need to return a table with at least the `new` function(you need to at least define `new` so that this component can be inherited from,
+you can also define other public constructors, [see](https://github.com/Jm466/opencomputers/blob/master/VTK/src/lib/VTK/Spacer.lua), that is between you and the component user).
+`new` does not have any parameters and returns a new instance of your Component:
 
 ```lua
 -- For this example let's take Component as our parent
