@@ -92,4 +92,4 @@ Whenever `new` gets called, the Component class will make sure to execute the `i
 of the child classes(i.e. grandfather:init() -> father:init() -> MyComponent:init()) you may not define `init` if you have
 nothing to initialize(it can be nil, it is checked).
 
-For a full example see [button](https://github.com/Jm466/opencomputers/blob/master/VTK/src/lib/VTK/button.lua) or any file in [/usr/lib/VTK/](https://github.com/Jm466/opencomputers/blob/master/VTK/src/lib/VTK)
+For a full example see [Button](https://github.com/Jm466/opencomputers/blob/master/VTK/src/lib/VTK/Button.lua) or any file in [/usr/lib/VTK/](https://github.com/Jm466/opencomputers/blob/master/VTK/src/lib/VTK)

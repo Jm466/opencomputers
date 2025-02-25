@@ -129,7 +129,8 @@ When `Redraw` is called, you are expected to completely redraw the entire window
 The `Main` function gets called exactly once, after the program has finished loading.
 You can put the initialization code inside this function.
 The only difference between putting code inside and outside of `Main` is that, if the application crashes,
-if the crashing code is in `Main` the backtrace will be more detailled.
+if the crashing code is in `Main` the backtrace will be more detailled, also, all the global functions of the signal handlers should be
+accesible, no matter if `Main` is defined at the top of the file.
 The rest of the functions are called when the corresponding [event](https://ocdoc.cil.li/component:signals#screen) is triggered.
 
 #### API interface
@@ -153,33 +154,33 @@ Good ol'd print. It will print inside the window.
 
 `setCursor(x: number, y: number):boolean`
 
-Like in the [term api](https://ocdoc.cil.li/api:term)
+Like in the [term api](https://ocdoc.cil.li/api:term).
 
 `setBackground(color: number, isPaletteIndex: boolean?)`
 
-Like in the [gpu component](https://ocdoc.cil.li/component:gpu)
+Like in the [gpu component](https://ocdoc.cil.li/component:gpu).
 
 `setForeground(color: number, isPaletteIndex: boolean?)`
 
-Like in the [gpu component](https://ocdoc.cil.li/component:gpu)
+Like in the [gpu component](https://ocdoc.cil.li/component:gpu).
 
 `setPaletteColor(index: number, value: number)`
 
-Like in the [gpu component](https://ocdoc.cil.li/component:gpu)
+Like in the [gpu component](https://ocdoc.cil.li/component:gpu).
 
 `set(x: number, y: number, value: string, vertical: boolean?): boolean, string`
 
-Like in the [gpu component](https://ocdoc.cil.li/component:gpu)
+Like in the [gpu component](https://ocdoc.cil.li/component:gpu).
 Additionaly, if the opperation could not be performed, returns false and the reason of the failure.
 
 `copy(x: number, y: number, width: number, height:number, tx:number, ty:number): boolean, string`
 
-Like in the [gpu component](https://ocdoc.cil.li/component:gpu)
+Like in the [gpu component](https://ocdoc.cil.li/component:gpu).
 Additionaly, if the opperation could not be performed, returns false and the reason of the failure.
 
 `fill(x:number?, y:number?, width:number?, height:number?, char:string?): boolean, string`
 
-Like in the [term api](https://ocdoc.cil.li/api:term)
+Like in the [term api](https://ocdoc.cil.li/api:term).
 Additionaly, if the opperation could not be performed, returns false and the reason of the failure.
 The default values for each parameter are:
 
@@ -187,8 +188,7 @@ The default values for each parameter are:
 
 `getViewport():integer, integer`
 
-Like in the [gpu component](https://ocdoc.cil.li/component:gpu)
-
+Like in the [gpu component](https://ocdoc.cil.li/component:gpu).
 For a full application example see [test](https://github.com/Jm466/opencomputers/tree/master/VentanOS/src/ventanos_apps/test).
 
 ### Multi-window applications
