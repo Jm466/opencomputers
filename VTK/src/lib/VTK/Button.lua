@@ -1,7 +1,7 @@
-local vtk = require("VTK/core")
+local ClickableComponent = require("VTK/core/ClickableComponent")
 
 ---@class Button
-local Button = vtk.new_clickable()
+local Button = ClickableComponent.new()
 
 function Button:init(button)
 	button.text = "Button"
@@ -75,7 +75,7 @@ function Button:redraw_handler()
 end
 
 return {
-	new_button = function() ---@return Button
+	new = function() ---@return Button
 		return Button:new() ---@type Button
 	end,
 }

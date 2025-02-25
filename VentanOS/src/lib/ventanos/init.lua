@@ -13,12 +13,12 @@ local mutex = require("ventanos/mutex")
 ---@field setBackground fun(handle: WindowHandle, color: number, isPaletteIndex: boolean?)
 ---@field setForeground fun(handle: WindowHandle, color: number, isPaletteIndex: boolean?)
 ---@field setPaletteColor fun(handle: WindowHandle, index: number, value: number)
----@field print fun(handler: WindowHandle, ...): boolean, string
----@field set fun(handle: WindowHandle, x: number, y: number, value: string, vertical: boolean?): boolean, string
+---@field print fun(handle: WindowHandle, ...): boolean, string
 ---@field setCursor fun(handle: WindowHandle, x: number, y: number):boolean
+---@field set fun(handle: WindowHandle, x: number, y: number, value: string, vertical: boolean?): boolean, string
 ---@field copy fun(handle: WindowHandle, x: number, y: number, width: number, height:number, tx:number, ty:number): boolean, string
 ---@field fill fun(handle: WindowHandle, x:number?, y:number?, width:number?, height:number?, char:string?): boolean, string
----@field getViewport fun(handle:WindowHandle):integer, integer
+---@field getViewport fun(handle: WindowHandle):integer, integer
 local WindowHandle = {}
 
 ---@param args {string: table<any, table<string>>}

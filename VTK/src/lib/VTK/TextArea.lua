@@ -1,7 +1,7 @@
-local vtk = require("VTK/core")
+local Component = require("VTK/core/Component")
 
 ---@class TextArea
-local TextArea = vtk.new_component()
+local TextArea = Component.new()
 
 function TextArea:init(text_area)
 	text_area.foreground_color = 0xffffff
@@ -75,7 +75,7 @@ function TextArea:scroll_handler(_, _, direction)
 end
 
 return {
-	new_text_area = function() ---@return TextArea
+	new = function() ---@return TextArea
 		return TextArea:new() ---@type TextArea
 	end,
 }

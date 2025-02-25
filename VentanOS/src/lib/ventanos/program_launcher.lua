@@ -177,36 +177,46 @@ local function drop_handler(handle, x, y)
 
 	local wm = require("ventanos/window_manager")
 
-	wm.call_userspace(handle.id, function()
-		handle:setTitle(app.name)
+	handle:setTitle(app.name)
 
-		-- We set the ventanos api functions for the environment, they are just a wrapper for handle:<func_name>
-		for func in pairs(getmetatable(handle).__index) do
-			_ENV[func] = function(...)
-				return handle[func](handle, ...)
-			end
+	-- We set the ventanos api functions for the environment, they are just a wrapper for window_handle:<func_name>
+	for func in pairs(getmetatable(handle).__index) do
+		_ENV[func] = function(...)
+			return handle[func](handle, ...)
 		end
+	end
 
-		_ENV.WINDOW_HANDLE = handle
+	_ENV.WINDOW_HANDLE = handle
 
-		loadfile(app.init_path)() -- This is where the magic happens: The entry point
+	local status, err = wm.call_userspace(handle.id, loadfile(app.init_path), "program_load") -- This is where the magic happens: The entry point
 
-		if _ENV.Redraw == nil then
-			error("When loading the application, function Redraw was not found in environment")
-		end
+	if not status then
+		err = err and err or ""
+		error("When loading the application, the application could not be loaded: " .. err)
+	end
 
-		handle.window.redraw_handler = _ENV.Redraw
-		handle.window.touch_handler = _ENV.Touch
-		handle.window.drop_handler = _ENV.Drop
-		handle.window.drag_handler = _ENV.Drag
-		handle.window.scroll_handler = _ENV.Scroll
+	if _ENV.Redraw == nil then
+		error("When loading the application, function Redraw was not found in environment")
+	end
 
-		if _ENV.Main then
-			_ENV.Main() -- This is it, the real deal, the actual entry point(if it has one anyway)
-		end
+	handle.window.redraw_handler = _ENV.Redraw
+	handle.window.touch_handler = _ENV.Touch
+	handle.window.drop_handler = _ENV.Drop
+	handle.window.drag_handler = _ENV.Drag
+	handle.window.scroll_handler = _ENV.Scroll
 
-		wm.call_userspace(handle.id, handle.window.redraw_handler, "handler")
-	end, "main")
+	if _ENV.Main then
+		wm.call_userspace(handle.id, _ENV.Main, "main") -- This is it, the real deal, the actual entry point(if it has one anyway)
+	end
+
+	_ENV.Redraw = nil
+	_ENV.Touch = nil
+	_ENV.Drop = nil
+	_ENV.Drag = nil
+	_ENV.Scroll = nil
+	_ENV.Main = nil
+
+	wm.call_userspace(handle.id, handle.window.redraw_handler, "handler")
 end
 return function()
 	local ventanos_api = require("ventanos")

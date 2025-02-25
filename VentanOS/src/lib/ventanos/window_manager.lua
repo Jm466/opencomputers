@@ -528,21 +528,30 @@ end
 
 ---@param id integer
 ---@param user_function function
----@param type "handler"|"main"|"internal"
-function call_userspace(id, user_function, type, ...)
-	thread.create(function(...)
+---@param call_type "handler"|"main"|"internal"|"program_load"
+function call_userspace(id, user_function, call_type, ...)
+	local status, error
+
+	if type(user_function) ~= "function" then
+		if call_type == "program_load" then
+			return false, "Posibly failed to parse init.lua, does init.lua contain any errors?"
+		end
+		return false, "invalid user_function"
+	end
+
+	local child = thread.create(function(...)
 		local w = id_to_window(id)
 
 		local old_workdir = shell.getWorkingDirectory()
 		shell.setWorkingDirectory(w.workdir)
 
 		local c = coroutine.create(user_function)
-		local status, error = coroutine.resume(c, ...)
+		status, error = coroutine.resume(c, ...)
 
 		shell.setWorkingDirectory(old_workdir)
 
 		if status then
-			return error
+			return
 		end
 
 		local trace = debug.traceback(c, error)
@@ -562,12 +571,14 @@ function call_userspace(id, user_function, type, ...)
 			w.cursor_y = 1
 
 			window_fill(id, 1, 1, w.viewport_width, w.viewport_height, " ")
-			if type == "main" then
+			if call_type == "main" then
 				window_print(id, "The application just crashed!")
-			elseif type == "handler" then
+			elseif call_type == "handler" then
 				window_print(id, "A handler of the application just crashed!")
-			elseif type == "internal" then
+			elseif call_type == "internal" then
 				window_print(id, "VentanOS error!")
+			elseif call_type == "program_load" then
+				window_print(id, "init.lua crashed while loading!")
 			end
 
 			window_print(id, trace)
@@ -576,6 +587,11 @@ function call_userspace(id, user_function, type, ...)
 		update_title(id, "Kaboom!")
 		w.redraw_handler()
 	end, ...)
+
+	if call_type == "program_load" then
+		child:join()
+		return status, error
+	end
 end
 
 ---@param window Window
@@ -906,8 +922,8 @@ local function change_geometry(id, new_x, new_y, new_width, new_height)
 				height = w.viewport_height,
 			}
 			local rects = util.subtract(new_dimensions, old_viewport_in_new_coordinates)
+			setColorsOfClient(w)
 			for _, rect in pairs(rects) do
-				setColorsOfClient(w)
 				gpu.fill(rect.x, rect.y, rect.width, rect.height, " ")
 			end
 		end
@@ -926,7 +942,6 @@ local function change_geometry(id, new_x, new_y, new_width, new_height)
 					rect.y - w.y + 1
 				)
 			end
-			--os.sleep(1)
 			if tmp_buffer then
 				gpu.bitblt(
 					tmp_buffer,
@@ -1102,6 +1117,9 @@ local function mouse_event_handler(event, x, y)
 		mouse_event.window = nil
 		if mouse_event.action ~= "move" then
 			draw_window(id)
+		else
+			draw_frame(id)
+			draw_title(id)
 		end
 	else
 		draw_frame(id)

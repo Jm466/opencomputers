@@ -1,34 +1,7 @@
----@class Component
-local Component = {
-	x = 1,
-	y = 1,
-	width = 0,
-	height = 0,
-	pref_width = 5,
-	pref_height = 5,
-	min_width = 0,
-	min_height = 0,
-	max_width = math.huge,
-	max_height = math.huge,
-}
+local Component = require("VTK/core/Component")
 
----@param class Component
----@param comp Component
-local function initialize_component(class, comp)
-	if class.parent and class ~= class.parent then
-		initialize_component(class.parent, comp)
-	end
-	if class.init then
-		class:init(comp)
-	end
-end
-
-function Component:new()
-	local new_component = setmetatable({}, { __index = self })
-	new_component.parent = self
-	initialize_component(self, new_component)
-	return new_component
-end
+---@alias horizontal_field "max_width"|"pref_width"|"min_width"
+---@alias vertical_field "max_height"|"pref_height"|"min_height"
 
 ---@return boolean success
 local function array_remove(array, value)
@@ -42,32 +15,6 @@ local function array_remove(array, value)
 	end
 	return false
 end
-
----@class ClickableComponent
-local Clickable = Component:new()
-
-function Clickable:init(clickable)
-	clickable.click_listeners = {}
-end
-
-function Clickable:add_click_listener(func)
-	self.click_listeners[#self.click_listeners + 1] = func
-end
-
-function Clickable:remove_click_listener(func)
-	return array_remove(self.click_listeners, func)
-end
-
-function Clickable:click()
-	if self.click_listeners then
-		for _, listener in pairs(self.click_listeners) do
-			listener()
-		end
-	end
-end
-
----@alias horizontal_field "max_width"|"pref_width"|"min_width"
----@alias vertical_field "max_height"|"pref_height"|"min_height"
 
 local max = math.max
 local min = math.min
@@ -198,25 +145,6 @@ local function sandboxed_copy(panel, component, x, y, width, height, tx, ty)
 	end
 end
 
----@param panel Panel
----@param component Component
-local function sandbox(panel, component)
-	component.set = function(...)
-		sandboxed_set(panel, component, ...)
-	end
-
-	component.fill = function(...)
-		sandboxed_fill(panel, component, ...)
-	end
-
-	component.copy = function(...)
-		sandboxed_copy(panel, component, ...)
-	end
-	for func in pairs({ "setBackground", "setForeground", "setPaletteColor" }) do
-		component[func] = panel[func]
-	end
-end
-
 ---@param component Component
 ---@param field horizontal_field|vertical_field
 ---@return horizontal_field|vertical_field
@@ -257,7 +185,23 @@ end
 
 function Panel:add_component(comp)
 	self.components_array[#self.components_array + 1] = comp
-	sandbox(self, comp)
+	comp.set = function(...)
+		sandboxed_set(self, comp, ...)
+	end
+
+	comp.fill = function(...)
+		sandboxed_fill(self, comp, ...)
+	end
+
+	comp.copy = function(...)
+		sandboxed_copy(self, comp, ...)
+	end
+	for _, func in pairs({ "setBackground", "setForeground", "setPaletteColor" }) do
+		comp[func] = function(...)
+			self[func](...)
+		end
+	end
+
 	self.context_changed = true
 end
 
@@ -461,7 +405,7 @@ function Panel:draw_scrollbar()
 	local x, y, bar, link, length
 
 	if self.layout_orientation == "horizontal" then
-		_ENV.setBackground(background - self.scroll_bar_background_dark_factor)
+		self.setBackground(background - self.scroll_bar_background_dark_factor)
 		self.fill(1, self.height, self.width, 1)
 
 		x = math.ceil(self.scroll_state * self.width / self.length_sum) + 1
@@ -469,7 +413,7 @@ function Panel:draw_scrollbar()
 		length = min(self.width, floor((self.width ^ 2) / self.length_sum)) - 2
 		link = "-"
 	else
-		_ENV.setBackground(background - self.scroll_bar_background_dark_factor)
+		self.setBackground(background - self.scroll_bar_background_dark_factor)
 		self.fill(self.width, 1, 1, self.height)
 
 		x = self.width
@@ -484,13 +428,13 @@ function Panel:draw_scrollbar()
 	end
 	bar = bar .. "O"
 
-	_ENV.setForeground(self.scroll_bar_button_color)
-	_ENV.setBackground(self.scroll_bar_color)
+	self.setForeground(self.scroll_bar_button_color)
+	self.setBackground(self.scroll_bar_color)
 	self.set(x, y, bar, self.layout_orientation == "vertical")
 end
 
 function Panel:partial_redraw_with_scrollbar(scroll_direcction)
-	_ENV.setBackground(self.background_color and self.background_color or self.parent_background)
+	self.setBackground(self.background_color and self.background_color or self.parent_background)
 	if self.layout_orientation == "horizontal" then
 		if scroll_direcction == 1 then
 			self.copy(1, 1, self.width - 1, self.height - 1, 1, 0)
@@ -625,7 +569,7 @@ end
 
 function Panel:redraw_handler()
 	local background = self.background_color and self.background_color or self.parent_background
-	_ENV.setBackground(background)
+	self.setBackground(background)
 	self.fill(self.x, self.y, self.width, self.height)
 
 	self:calculate_geometry()
@@ -650,13 +594,7 @@ function Panel:redraw_handler()
 end
 
 return {
-	new_component = function() ---@return Component
-		return Component:new()
-	end,
-	new_clickable = function() ---@return ClickableComponent
-		return Clickable:new() ---@type ClickableComponent
-	end,
-	new_panel = function() ---@return Panel
+	new = function() ---@return Panel
 		return Panel:new() ---@type Panel
 	end,
 }

@@ -16,9 +16,9 @@
 ---@class Component
 ---@field width integer Read only. This is the width that the component must use to draw itself
 ---@field height integer Read only. This is the height that the component must use to draw itself
----@field set function Read only. Set method of the component
----@field fill function Read only. Fill method of the component
----@field copy function Read only. Copy method of the component
+---@field set fun(x: number, y: number, value: string, vertical: boolean?) Read only. Set function of the component
+---@field fill fun(x:number?, y:number?, width:number?, height:number?, char:string?) Read only. Fill function of the component
+---@field copy fun(x: number, y: number, width: number, height:number, tx:number, ty:number) Read only. Copy function of the component
 ---@field setBackground function Read only. SetBackground method for the component(sets the background color for the whole window)
 ---@field setForeground function Read only. SetForeground method for the component(sets the foreground color for the whole window)
 ---@field setPaletteColor function Read only. SetPaletteColor method for the component(sets the palette color for the whole window)
