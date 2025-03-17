@@ -2,9 +2,8 @@
 
 VentanOS is a window manager for openos inspired by Microsoft's Windows xp
 
-![](img.png)
-
-![](https://www.youtube.com/embed/0-JKaqwn-nA?si=cW-7ieTU0tQaxVzY)
+[![](img.png)](https://youtu.be/0-JKaqwn-nA?si=Tumqwfv4NvE_KHTW)
+(click image for demo)
 
 ## Installation
 
